@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>英打遊戲開發歷程</title>
+<title>英打遊戲版本三 (ASDF 練習)</title>
 <style>
   * {
     box-sizing: border-box;
@@ -15,61 +15,150 @@
     color: #111111;
     font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
   }
+  .topbar {
+    padding: 16px 24px;
+    border-bottom: 1px solid #dddddd;
+  }
+  .topbar a {
+    color: #1a56c4;
+    font-size: 1rem;
+  }
   main {
-    max-width: 1100px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 32px;
+    max-width: 640px;
     margin: 0 auto;
-    padding: 56px 24px;
+    padding: 48px 24px;
   }
   h1 {
-    margin: 0 0 40px;
-    font-size: 2.25rem;
+    margin: 0;
+    font-size: 2rem;
     text-align: center;
   }
-  .cards {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 24px;
+  .score {
+    font-size: 1.5rem;
+    font-weight: 600;
   }
-  .card {
+  .keys {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    width: 100%;
+  }
+  .key {
+    aspect-ratio: 1 / 1;
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 160px;
-    padding: 24px;
+    font-size: 2.5rem;
+    font-weight: 700;
     color: #111111;
     background: #f4f4f4;
-    border: 2px solid #111111;
+    border: 3px solid #111111;
     border-radius: 12px;
+    user-select: none;
+  }
+  .key.lit {
+    background: #ffd43b;
+    box-shadow: 0 0 0 4px rgba(255, 212, 59, 0.45);
+  }
+  #start {
+    font: inherit;
     font-size: 1.25rem;
-    font-weight: 600;
-    text-align: center;
-    text-decoration: none;
+    padding: 12px 40px;
+    color: #ffffff;
+    background: #111111;
+    border: 2px solid #111111;
+    border-radius: 8px;
+    cursor: pointer;
   }
-  .card:hover {
-    background: #e6e6e6;
-  }
-  .card:focus-visible {
+  #start:focus-visible,
+  .topbar a:focus-visible {
     outline: 3px solid #1a73e8;
     outline-offset: 3px;
   }
-  @media (max-width: 720px) {
-    .cards {
-      grid-template-columns: 1fr;
-    }
+  @media (max-width: 480px) {
     h1 {
+      font-size: 1.5rem;
+    }
+    .keys {
+      gap: 8px;
+    }
+    .key {
       font-size: 1.75rem;
     }
   }
 </style>
 </head>
 <body>
+  <div class="topbar">
+    <a href="../index.html">返回歷程首頁</a>
+  </div>
+
   <main>
-    <h1>英打遊戲開發歷程</h1>
-    <div class="cards">
-      <a class="card" href="file:///E:/my-typing-work/typing-v1/index.html" target="_blank" rel="noopener">英打遊戲版本一</a>
-      <a class="card" href="file:///E:/my-typing-work/typing-V2/index.html" target="_blank" rel="noopener">英打遊戲版本二</a>
-      <a class="card" href="coming-soon.html">英打遊戲版本三 (Coming Soon)</a>
+    <h1>英打遊戲版本三 (ASDF 練習)</h1>
+    <div class="score">得分：<span id="score">0</span></div>
+
+    <div class="keys">
+      <div class="key" data-key="A">A</div>
+      <div class="key" data-key="S">S</div>
+      <div class="key" data-key="D">D</div>
+      <div class="key" data-key="F">F</div>
     </div>
+
+    <button type="button" id="start">開始</button>
   </main>
+
+  <script>
+    var LETTERS = ["A", "S", "D", "F"];
+    var keyEls = {};
+    document.querySelectorAll(".key").forEach(function (el) {
+      keyEls[el.dataset.key] = el;
+    });
+    var scoreEl = document.getElementById("score");
+    var startBtn = document.getElementById("start");
+
+    var playing = false;
+    var score = 0;
+    var current = null;
+
+    function lightNext() {
+      var next;
+      do {
+        next = LETTERS[Math.floor(Math.random() * LETTERS.length)];
+      } while (next === current);
+      if (current) keyEls[current].classList.remove("lit");
+      current = next;
+      keyEls[current].classList.add("lit");
+    }
+
+    function startGame() {
+      playing = true;
+      score = 0;
+      scoreEl.textContent = score;
+      current = null;
+      LETTERS.forEach(function (l) { keyEls[l].classList.remove("lit"); });
+      lightNext();
+    }
+
+    startBtn.addEventListener("click", function () {
+      startGame();
+      startBtn.blur();
+    });
+
+    document.addEventListener("keydown", function (e) {
+      if (!playing || e.repeat) return;
+      var map = { KeyA: "A", KeyS: "S", KeyD: "D", KeyF: "F" };
+      var pressed = map[e.code];
+      if (!pressed) return;
+      if (pressed === current) {
+        score += 1;
+        scoreEl.textContent = score;
+        lightNext();
+      }
+    });
+  </script>
 </body>
 </html>
