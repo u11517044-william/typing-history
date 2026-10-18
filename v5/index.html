@@ -285,6 +285,11 @@
   @keyframes ring { 0% { transform: scale(.3); opacity: 1; } 100% { transform: scale(3); opacity: 0; } }
   @keyframes okflash { 0% { box-shadow: 0 0 26px var(--g2); } 100% { box-shadow: 0 0 16px rgba(16,185,129,.45); } }
 
+  .navbtns { display: flex; gap: 8px; align-items: center; }
+  .mini.sound { color: var(--g2); border-color: var(--g); }
+  .mini.sound:hover { background: rgba(16,185,129,.18); color: var(--g2); border-color: var(--g); }
+  .mini.sound.off { color: var(--dim); border-color: #334155; }
+
   @media (max-width: 640px) {
     .tower { grid-template-columns: repeat(5, 1fr); }
     .nav h1 span { display: none; }
@@ -302,7 +307,10 @@
 <header class="nav">
   <a class="back" href="../index.html">← 返回歷程首頁</a>
   <h1>SIDE-TOWER.EXE <span>// 橫向進擊高塔 Boss 戰</span></h1>
-  <button id="resetBtn" class="mini" type="button">重置遊戲進度</button>
+  <div class="navbtns">
+    <button id="muteBtn" class="mini sound" type="button" aria-pressed="false">🔊 音效開啟</button>
+    <button id="resetBtn" class="mini" type="button">重置遊戲進度</button>
+  </div>
 </header>
 
 <main>
@@ -374,6 +382,68 @@
 <script>
 (function () {
   'use strict';
+
+  /* ================= 音效（BGM + 音效）================= */
+  var MUTE_KEY = 'sideTowerTyping_muted';
+  var muted = false;
+  try { muted = localStorage.getItem(MUTE_KEY) === '1'; } catch (e) {}
+
+  function makeAudio(src, vol, loop) {
+    var a = new Audio(src);
+    a.preload = 'auto';
+    a.volume = vol;
+    a.loop = !!loop;
+    a.addEventListener('error', function () { /* 檔案不存在時靜默略過，不影響遊戲 */ });
+    return a;
+  }
+  var bgm = makeAudio('audio/bgm.mp3', 0.35, true);          // 背景音樂（循環）
+  var sfx = {
+    hit:      makeAudio('audio/hit.wav', 0.5),               // 擊中 / 擊退
+    critical: makeAudio('audio/critical.wav', 0.8),          // 完成單字爆擊
+    warning:  makeAudio('audio/warning.wav', 0.7)            // Boss 碰撞扣血
+  };
+
+  function safePlay(a) {
+    try { var p = a.play(); if (p && p.catch) p.catch(function () {}); } catch (e) {}
+  }
+  function playSfx(name) {
+    if (muted) return;
+    var a = sfx[name];
+    if (!a) return;
+    try { a.currentTime = 0; } catch (e) {}                  // 每次從頭播放，連續打字不卡頓
+    safePlay(a);
+  }
+  function startBgm() {
+    if (!muted && bgm.paused) safePlay(bgm);
+  }
+  function updateMuteBtn() {
+    var b = document.getElementById('muteBtn');
+    b.textContent = muted ? '🔇 靜音' : '🔊 音效開啟';
+    b.classList.toggle('off', muted);
+    b.setAttribute('aria-pressed', muted ? 'true' : 'false');
+  }
+  function toggleMute() {
+    muted = !muted;
+    try { localStorage.setItem(MUTE_KEY, muted ? '1' : '0'); } catch (e) {}
+    if (muted) {
+      bgm.pause();
+      Object.keys(sfx).forEach(function (k) { sfx[k].pause(); });
+    } else {
+      safePlay(bgm);
+    }
+    updateMuteBtn();
+    document.getElementById('muteBtn').blur();               // 避免之後按空白鍵誤觸按鈕
+  }
+  // 瀏覽器要求使用者互動後才能播放：第一次按鍵或點擊時啟動 BGM
+  function firstGesture() {
+    startBgm();
+    document.removeEventListener('keydown', firstGesture);
+    document.removeEventListener('pointerdown', firstGesture);
+  }
+  document.addEventListener('keydown', firstGesture);
+  document.addEventListener('pointerdown', firstGesture);
+  document.getElementById('muteBtn').addEventListener('click', toggleMute);
+  updateMuteBtn();
 
   /* ================= 遊戲參數 ================= */
   var BASE_DMG = 10;          // 每敲對一個字母的基礎傷害
@@ -591,6 +661,7 @@
   function startBattle() {
     if (G.state !== 'ready') return;
     G.state = 'playing';
+    startBgm();
     $('ready').hidden = true;
     setLog('Boss 出現了！快輸入目標文字擊退它！');
     updateKeyboard();
@@ -762,6 +833,7 @@
     var dead = G.bossHp <= 0;
 
     fireMissile(unitDone ? 'big' : '');
+    playSfx(unitDone && len > 1 ? 'critical' : 'hit');
     setTimeout(function () {
       retrigger($('boss'), 'hit');
       floatText('bossIcon', (unitDone ? '爆擊 -' : '-') + dmg, unitDone ? 'crit' : '');
@@ -793,6 +865,7 @@
 
   function contactTick() {
     G.hp = Math.max(0, G.hp - CONTACT_DMG);
+    playSfx('warning');
     updateCrystalBar();
     shake(true);
     retrigger($('player'), 'hurt');
