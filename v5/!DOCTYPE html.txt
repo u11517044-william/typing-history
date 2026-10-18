@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>橫向進擊高塔｜Boss 擊退英打戰</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --deep: #0b1220;
+    --g: #10b981;
+    --g2: #34d399;
+    --txt: #a7f3d0;
+    --dim: #64748b;
+    --pending: #94a3b8;
+    --red: #ef4444;
+    --amber: #f59e0b;
+    --purple: #c084fc;
+    --ground: 18px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); }
+  body {
+    color: var(--txt);
+    font-family: "Consolas", "Courier New", "Noto Sans TC", monospace;
+    min-height: 100vh;
+    background-image:
+      linear-gradient(rgba(16,185,129,.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(16,185,129,.05) 1px, transparent 1px);
+    background-size: 32px 32px;
+    user-select: none;
+    overflow-x: hidden;
+  }
+  button { font-family: inherit; cursor: pointer; }
+
+  /* ===== 導覽 ===== */
+  .nav {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    padding: 12px 20px; background: var(--panel);
+    border-bottom: 1px solid var(--g); box-shadow: 0 0 18px rgba(16,185,129,.25);
+  }
+  .nav a.back {
+    color: var(--g2); text-decoration: none; font-weight: bold;
+    border: 1px solid var(--g); padding: 6px 12px; border-radius: 6px; transition: .2s;
+  }
+  .nav a.back:hover { background: var(--g); color: #052e1f; box-shadow: 0 0 12px var(--g); }
+  .nav h1 { font-size: 1.15rem; letter-spacing: 2px; color: var(--g2); text-shadow: 0 0 8px rgba(16,185,129,.7); }
+  .nav h1 span { color: var(--dim); font-size: .85rem; letter-spacing: 1px; }
+  .mini {
+    background: transparent; color: var(--dim); border: 1px solid #334155;
+    padding: 5px 10px; border-radius: 6px; font-size: .8rem; transition: .2s;
+  }
+  .mini:hover { color: var(--red); border-color: var(--red); }
+
+  main { max-width: 1000px; margin: 0 auto; padding: 16px 14px 40px; display: flex; flex-direction: column; gap: 14px; }
+  .card {
+    background: var(--panel); border: 1px solid rgba(16,185,129,.45); border-radius: 12px;
+    box-shadow: 0 0 16px rgba(16,185,129,.12), inset 0 0 20px rgba(0,0,0,.25);
+  }
+
+  /* ===== 頂端：樓層選擇與進度 ===== */
+  .top { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .toprow { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; }
+  #floorTitle { font-size: 1.2rem; font-weight: bold; color: var(--g2); text-shadow: 0 0 8px rgba(16,185,129,.6); }
+  #saveState { font-size: .8rem; color: var(--dim); transition: .3s; }
+  #saveState.flash { color: var(--g2); text-shadow: 0 0 8px var(--g); }
+  #floorDesc { font-size: .85rem; }
+  .tower { display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; }
+  .fl {
+    background: var(--deep); color: var(--g2); border: 1px solid var(--g); border-radius: 8px;
+    padding: 6px 2px; display: flex; flex-direction: column; align-items: center; gap: 1px;
+    font-weight: bold; font-size: .9rem; transition: .15s;
+  }
+  .fl small { font-size: .62rem; font-weight: normal; opacity: .85; }
+  .fl .ic { font-size: 1.15rem; }
+  .fl:hover:not(:disabled) { background: rgba(16,185,129,.2); box-shadow: 0 0 10px var(--g); }
+  .fl.current { background: var(--g); color: #052e1f; box-shadow: 0 0 14px var(--g); }
+  .fl.cleared:not(.current) { border-style: double; border-width: 3px; }
+  .fl:disabled { color: #475569; border-color: #334155; background: #0a0f1c; cursor: not-allowed; }
+  .prog { display: flex; align-items: center; gap: 8px; font-size: .75rem; color: var(--dim); }
+  .prog .track { flex: 1; height: 8px; background: #020617; border: 1px solid #334155; border-radius: 6px; overflow: hidden; }
+  .prog .track i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #059669, var(--g2)); box-shadow: 0 0 8px var(--g); transition: width .3s; }
+
+  /* ===== 戰鬥區 ===== */
+  #app { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  #app.shake { animation: shake .3s; }
+  #app.shake-big { animation: shake .45s; }
+
+  .stage {
+    position: relative; overflow: hidden; height: 330px;
+    border: 1px solid #334155; border-radius: 10px;
+    background:
+      radial-gradient(ellipse at 20% 40%, rgba(168,85,247,.18), transparent 55%),
+      radial-gradient(ellipse at 85% 40%, rgba(16,185,129,.18), transparent 55%),
+      repeating-linear-gradient(90deg, rgba(255,255,255,.025) 0 2px, transparent 2px 60px),
+      linear-gradient(#0b1220, #111c33 70%, #16233f);
+  }
+  .ground {
+    position: absolute; left: 0; right: 0; bottom: 0; height: var(--ground); z-index: 1;
+    background: repeating-linear-gradient(90deg, #1e293b 0 38px, #0f172a 38px 40px);
+    border-top: 2px solid var(--g); box-shadow: 0 -4px 14px rgba(16,185,129,.35);
+  }
+  #warn { position: absolute; inset: 0; z-index: 8; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at 100% 60%, rgba(239,68,68,.55), rgba(239,68,68,.12) 60%, transparent); }
+  #warn.on { animation: warnblink .5s infinite alternate; }
+  #warnText {
+    position: absolute; left: 50%; top: 10px; transform: translateX(-50%); z-index: 9; pointer-events: none;
+    font-size: 1.2rem; font-weight: 900; letter-spacing: 3px; color: #fecaca; text-shadow: 0 0 12px var(--red);
+    opacity: 0;
+  }
+  #warnText.on { opacity: 1; animation: blink .5s infinite; }
+  .stage .zonelabel { position: absolute; top: 8px; font-size: .68rem; color: var(--dim); letter-spacing: 1px; z-index: 2; }
+  .stage .zl-l { left: 12px; } .stage .zl-r { right: 12px; }
+
+  /* 出生點 */
+  .gate {
+    position: absolute; left: 4px; bottom: var(--ground); width: 44px; height: 120px; z-index: 2;
+    border-radius: 50% / 40%; border: 3px solid var(--purple);
+    background: radial-gradient(ellipse, rgba(192,132,252,.5), rgba(88,28,135,.2) 60%, transparent);
+    box-shadow: 0 0 22px var(--purple), inset 0 0 18px rgba(192,132,252,.6);
+    animation: gatepulse 2s infinite;
+  }
+
+  /* Boss */
+  .boss {
+    --bc: #a78bfa;
+    position: absolute; bottom: var(--ground); left: 44px; z-index: 4;
+    width: clamp(120px, 22vw, 170px); display: flex; flex-direction: column; align-items: center; gap: 3px;
+  }
+  .bname { font-size: .72rem; color: #fca5a5; letter-spacing: 1px; white-space: nowrap; }
+  .bhp {
+    position: relative; width: 100%; height: 14px; border-radius: 8px; overflow: hidden;
+    background: #020617; border: 1px solid var(--red); box-shadow: 0 0 10px rgba(239,68,68,.45);
+  }
+  .bhp .trail, .bhp .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; }
+  .bhp .trail { background: #fca5a5; transition: width .7s .25s; }
+  .bhp .fill {
+    background:
+      repeating-linear-gradient(90deg, transparent 0 14px, rgba(0,0,0,.35) 14px 16px),
+      linear-gradient(90deg, #b91c1c, #f43f5e, #fb7185);
+    box-shadow: 0 0 8px #f43f5e; transition: width .15s;
+  }
+  .bhp span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: .62rem; font-weight: bold; color: #fff; text-shadow: 0 1px 2px #000; z-index: 2; }
+  .bicon-wrap { display: inline-block; }
+  .bicon {
+    font-size: clamp(3.6rem, 12vw, 6rem); line-height: 1.05; display: inline-block;
+    filter: drop-shadow(0 0 14px var(--bc)); animation: walk .7s ease-in-out infinite;
+  }
+  .boss.hit .bicon-wrap { animation: hit .22s; }
+  .boss.dead .bicon-wrap { animation: die .9s forwards; }
+  .boss.enter .bicon-wrap { animation: enter .6s; }
+
+  /* 玩家陣地 */
+  .home { position: absolute; right: 8px; bottom: var(--ground); width: 150px; height: 190px; z-index: 3; }
+  .chp { position: absolute; left: 0; right: 0; top: 0; height: 16px; background: #020617; border: 1px solid var(--g); border-radius: 8px; overflow: hidden; box-shadow: 0 0 10px rgba(16,185,129,.4); }
+  .chp i { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; background: linear-gradient(90deg, #059669, #34d399); transition: width .2s; }
+  .chp i.low { background: linear-gradient(90deg, #b91c1c, #f87171); }
+  .chp span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: .65rem; font-weight: bold; color: #fff; text-shadow: 0 1px 2px #000; z-index: 2; }
+  .player { position: absolute; left: 0; bottom: 0; width: 64px; text-align: center; }
+  .player .sprite { font-size: 3.2rem; display: inline-block; filter: drop-shadow(0 0 8px rgba(16,185,129,.7)); }
+  .player .wand { position: absolute; left: -10px; top: 10px; font-size: 1.5rem; transform: rotate(30deg) scaleX(-1); }
+  .player.hurt .sprite { animation: hurt .35s; }
+  .player.dead .sprite { filter: grayscale(1); transform: rotate(-90deg); transition: .5s; }
+  .crystal {
+    position: absolute; right: 8px; bottom: 0; width: 64px; height: 110px;
+    background: linear-gradient(135deg, #a7f3d0, #10b981 45%, #065f46);
+    clip-path: polygon(50% 0, 100% 35%, 80% 100%, 20% 100%, 0 35%);
+    filter: drop-shadow(0 0 14px #10b981); animation: crystalfloat 2.4s ease-in-out infinite;
+  }
+  .crystal.danger { background: linear-gradient(135deg, #fecaca, #ef4444 45%, #7f1d1d); filter: drop-shadow(0 0 18px #ef4444); animation: blink .3s infinite; }
+  .crystal.dead { background: #334155; filter: none; animation: none; }
+
+  /* 特效 */
+  .missile {
+    position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; z-index: 6; pointer-events: none;
+    background: radial-gradient(#ecfdf5, #10b981 70%);
+    box-shadow: 0 0 14px #10b981, 0 0 30px #10b981, 22px 0 18px rgba(16,185,129,.55);
+    transition: left .22s linear, top .22s linear;
+  }
+  .missile.big { width: 30px; height: 30px; margin: -15px 0 0 -15px; background: radial-gradient(#fffbeb, #f59e0b 70%); box-shadow: 0 0 22px #f59e0b, 0 0 44px #f59e0b, 34px 0 24px rgba(245,158,11,.6); }
+  .dmg {
+    position: absolute; z-index: 7; pointer-events: none; font-weight: 900; font-size: 1.2rem; white-space: nowrap;
+    color: var(--g2); text-shadow: 0 0 8px var(--g), 0 2px 2px #000; animation: floatUp .9s forwards;
+  }
+  .dmg.crit { font-size: 2rem; color: #fbbf24; text-shadow: 0 0 12px var(--amber), 0 2px 2px #000; }
+  .dmg.pl { color: #f87171; text-shadow: 0 0 8px var(--red), 0 2px 2px #000; font-size: 1.6rem; }
+  .dmg.kb { font-size: 1.1rem; color: #67e8f9; text-shadow: 0 0 8px #06b6d4, 0 2px 2px #000; }
+  .ring {
+    position: absolute; z-index: 5; pointer-events: none; width: 60px; height: 60px; margin: -30px 0 0 -30px; border-radius: 50%;
+    border: 4px solid #fbbf24; box-shadow: 0 0 16px #f59e0b; animation: ring .5s forwards;
+  }
+
+  .log { min-height: 1.4em; text-align: center; font-size: .88rem; }
+
+  /* ===== 打字目標 ===== */
+  .target {
+    text-align: center; padding: 10px 14px; min-height: 84px;
+    background: #020617; border: 2px solid var(--g); border-radius: 12px; line-height: 1.5;
+    box-shadow: 0 0 16px rgba(16,185,129,.45), inset 0 0 12px rgba(16,185,129,.12);
+    display: flex; align-items: center; justify-content: center; flex-wrap: wrap;
+  }
+  .target.t-char { font-size: 3.4rem; }
+  .target.t-word { font-size: clamp(1.8rem, 6vw, 2.6rem); }
+  .target.t-sentence { font-size: clamp(1.05rem, 3vw, 1.5rem); line-height: 1.8; }
+  .target.flash { animation: okflash .3s; }
+  .wordgrp { display: inline-block; white-space: nowrap; }
+  .ch { display: inline-block; min-width: .6em; text-align: center; color: var(--pending); border-bottom: 3px solid transparent; }
+  .ch.space { font-size: .7em; color: #475569; min-width: .8em; }
+  .ch.done { color: var(--g); text-shadow: 0 0 8px rgba(16,185,129,.9); }
+  .ch.current { color: #fff; background: rgba(16,185,129,.2); border-bottom-color: var(--g2); animation: blink 1s infinite; }
+  .ch.current.error { color: #fecaca; background: rgba(239,68,68,.3); border-bottom-color: var(--red); animation: none; }
+  #shiftHint { min-height: 1.2em; text-align: center; font-size: .82rem; color: var(--amber); }
+
+  /* ===== 統計 ===== */
+  .hud { display: grid; grid-template-columns: 1fr; gap: 10px; }
+  .meter { background: var(--deep); border: 1px solid #334155; border-radius: 8px; padding: 8px 10px; }
+  .meter .lab { display: flex; justify-content: space-between; font-size: .75rem; color: var(--dim); margin-bottom: 4px; }
+  .meter .lab b { color: var(--g2); }
+  .meter .tr { height: 12px; background: #020617; border: 1px solid #334155; border-radius: 8px; overflow: hidden; }
+  .meter .tr i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #059669, #fbbf24, #ef4444); }
+  .statrow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; text-align: center; }
+  .stat { background: var(--deep); border: 1px solid #334155; border-radius: 8px; padding: 7px 2px; }
+  .stat .k { font-size: .68rem; color: var(--dim); letter-spacing: 1px; }
+  .stat .v { font-size: 1.15rem; color: var(--g2); font-weight: bold; }
+  .stat .v.low { color: var(--amber); }
+
+  /* ===== 鍵盤 ===== */
+  #keyboard { width: 100%; max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 5px; padding: 10px; background: var(--deep); border: 1px solid #334155; border-radius: 10px; }
+  .krow { display: flex; gap: 5px; }
+  .key, .spacer { flex: var(--f, 1) 1 0; min-width: 0; }
+  .key {
+    position: relative; height: clamp(30px, 4.8vw, 46px); display: flex; align-items: center; justify-content: center;
+    background: #111c33; color: var(--pending); border: 1px solid #334155; border-radius: 6px;
+    font-size: clamp(.55rem, 1.5vw, .9rem); transition: background .08s, box-shadow .08s;
+  }
+  .key.home::after { content: ""; position: absolute; bottom: 4px; width: 35%; height: 2px; background: #475569; border-radius: 2px; }
+  .key.target {
+    background: var(--g); color: #052e1f; font-weight: bold; border-color: #6ee7b7;
+    box-shadow: 0 0 12px var(--g), 0 0 28px rgba(16,185,129,.6); animation: pulse 1s infinite;
+  }
+  .key.ok { background: var(--g2); color: #000; }
+  .key.bad { background: var(--red); color: #fff; border-color: #fca5a5; box-shadow: 0 0 14px var(--red); animation: none; }
+  .note { text-align: center; font-size: .74rem; color: var(--dim); }
+
+  /* ===== 準備畫面 / 彈窗 ===== */
+  .ready {
+    position: absolute; inset: 0; z-index: 12; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 8px; text-align: center; padding: 16px; background: rgba(2,6,23,.88);
+  }
+  .ready[hidden] { display: none; }
+  .ready h2 { color: var(--g2); font-size: 1.5rem; text-shadow: 0 0 10px var(--g); }
+  .ready p { font-size: .88rem; }
+  .ready .hint { color: var(--dim); font-size: .78rem; }
+  .modal { position: fixed; inset: 0; background: rgba(2,6,23,.82); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+  .modal[hidden] { display: none; }
+  .box { width: 100%; max-width: 430px; text-align: center; padding: 26px 22px; background: var(--panel); border: 2px solid var(--g); border-radius: 14px; box-shadow: 0 0 30px rgba(16,185,129,.5); animation: pop .3s; }
+  .box.fail { border-color: var(--red); box-shadow: 0 0 30px rgba(239,68,68,.45); }
+  .box h2 { font-size: 1.5rem; margin-bottom: 6px; color: var(--g2); }
+  .box.fail h2 { color: var(--red); }
+  .box p { font-size: .9rem; margin-bottom: 14px; }
+  .res { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 18px; }
+  .res div { background: var(--deep); border: 1px solid #334155; border-radius: 8px; padding: 8px; }
+  .res b { display: block; font-size: 1.2rem; color: var(--g2); }
+  .res span { font-size: .72rem; color: var(--dim); }
+  .btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .btn { padding: 9px 18px; border-radius: 8px; font-size: .95rem; font-weight: bold; background: transparent; color: var(--g2); border: 1px solid var(--g); transition: .15s; }
+  .btn:hover { background: rgba(16,185,129,.2); }
+  .btn.primary { background: var(--g); color: #052e1f; box-shadow: 0 0 12px var(--g); }
+  .btn.primary:hover { background: var(--g2); }
+
+  /* ===== 動畫 ===== */
+  @keyframes blink { 50% { opacity: .55; } }
+  @keyframes pulse { 50% { box-shadow: 0 0 6px var(--g), 0 0 14px rgba(16,185,129,.4); } }
+  @keyframes pop { 0% { transform: scale(1.4); opacity: .4; } 100% { transform: scale(1); opacity: 1; } }
+  @keyframes shake { 0%,100% { transform: translate(0); } 20% { transform: translate(-5px, 2px); } 40% { transform: translate(5px, -2px); } 60% { transform: translate(-3px, -2px); } 80% { transform: translate(3px, 2px); } }
+  @keyframes walk { 0%,100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-8px) rotate(3deg); } }
+  @keyframes enter { 0% { transform: scale(.2); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+  @keyframes hit { 0% { filter: brightness(1); } 40% { filter: brightness(2.4) drop-shadow(0 0 20px #10b981); } 100% { filter: brightness(1); } }
+  @keyframes die { 0% { transform: none; opacity: 1; } 60% { transform: scale(1.25) rotate(10deg); filter: brightness(3); opacity: 1; } 100% { transform: scale(0) rotate(180deg); opacity: 0; } }
+  @keyframes hurt { 0% { transform: none; } 30% { transform: translateX(10px) rotate(12deg); filter: drop-shadow(0 0 14px #ef4444); } 100% { transform: none; } }
+  @keyframes floatUp { 0% { transform: translate(-50%, 0) scale(.6); opacity: 0; } 15% { transform: translate(-50%, -8px) scale(1.15); opacity: 1; } 100% { transform: translate(-50%, -64px) scale(1); opacity: 0; } }
+  @keyframes warnblink { from { opacity: .25; } to { opacity: 1; } }
+  @keyframes gatepulse { 50% { box-shadow: 0 0 34px var(--purple), inset 0 0 26px rgba(192,132,252,.8); } }
+  @keyframes crystalfloat { 50% { transform: translateY(-6px); } }
+  @keyframes ring { 0% { transform: scale(.3); opacity: 1; } 100% { transform: scale(3); opacity: 0; } }
+  @keyframes okflash { 0% { box-shadow: 0 0 26px var(--g2); } 100% { box-shadow: 0 0 16px rgba(16,185,129,.45); } }
+
+  @media (max-width: 640px) {
+    .tower { grid-template-columns: repeat(5, 1fr); }
+    .nav h1 span { display: none; }
+    .statrow { grid-template-columns: repeat(2, 1fr); }
+    .stage { height: 290px; }
+    .home { width: 118px; }
+    .player { width: 48px; } .player .sprite { font-size: 2.4rem; }
+    .crystal { width: 50px; height: 88px; }
+    .gate { height: 90px; width: 34px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <a class="back" href="../index.html">← 返回歷程首頁</a>
+  <h1>SIDE-TOWER.EXE <span>// 橫向進擊高塔 Boss 戰</span></h1>
+  <button id="resetBtn" class="mini" type="button">重置遊戲進度</button>
+</header>
+
+<main>
+  <!-- 頂端：樓層選擇器 / 進度地圖 -->
+  <section class="card top">
+    <div class="toprow">
+      <div id="floorTitle"></div>
+      <div id="saveState"></div>
+    </div>
+    <div id="floorDesc"></div>
+    <div id="tower" class="tower" aria-label="高塔進度地圖"></div>
+    <div class="prog"><span id="progText">通關 0/10</span><div class="track"><i id="progBar"></i></div></div>
+  </section>
+
+  <!-- 戰鬥 -->
+  <section class="card" id="app">
+    <div class="stage" id="stage">
+      <div id="warn"></div>
+      <div id="warnText">⚠ WARNING ⚠</div>
+      <div class="zonelabel zl-l">◀ BOSS 出生點</div>
+      <div class="zonelabel zl-r">玩家陣地 ▶</div>
+
+      <div class="gate" id="gate"></div>
+
+      <div class="boss" id="boss">
+        <div class="bname" id="bossName"></div>
+        <div class="bhp">
+          <div class="trail" id="hpTrail"></div>
+          <div class="fill" id="hpFill"></div>
+          <span id="hpText"></span>
+        </div>
+        <div class="bicon-wrap" id="bossIconWrap"><div class="bicon" id="bossIcon">👾</div></div>
+      </div>
+
+      <div class="home" id="home">
+        <div class="chp"><i id="cHpBar"></i><span id="cHpText">100 / 100</span></div>
+        <div class="player" id="player"><div class="sprite">🐱</div><span class="wand">🪄</span></div>
+        <div class="crystal" id="crystal"></div>
+      </div>
+
+      <div class="ground"></div>
+      <div class="ready" id="ready"></div>
+    </div>
+
+    <div class="log" id="log"></div>
+
+    <div class="target t-char" id="target"></div>
+    <div id="shiftHint"></div>
+    <div id="keyboard"></div>
+
+    <div class="hud">
+      <div class="meter">
+        <div class="lab"><span>⚠ Boss 推進度（100% = 撞到水晶）</span><b id="distText">0%</b></div>
+        <div class="tr"><i id="distBar"></i></div>
+      </div>
+      <div class="statrow">
+        <div class="stat"><div class="k">DPS</div><div class="v" id="sDps">0</div></div>
+        <div class="stat"><div class="k">正確率</div><div class="v" id="sAcc">--</div></div>
+        <div class="stat"><div class="k">連擊 COMBO</div><div class="v" id="sCombo">0</div></div>
+        <div class="stat"><div class="k">總傷害</div><div class="v" id="sDmg">0</div></div>
+      </div>
+    </div>
+    <div class="note">用實體鍵盤輸入目標文字：敲對擊退 Boss，完成單字大擊退＋爆擊；Boss 撞到水晶會每秒扣 20 HP</div>
+  </section>
+</main>
+
+<div id="modal" class="modal" hidden><div class="box" id="modalBox"></div></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ================= 遊戲參數 ================= */
+  var BASE_DMG = 10;          // 每敲對一個字母的基礎傷害
+  var WORD_BONUS = 20;        // 完成單字：長度 × 20 爆擊傷害
+  var PLAYER_MAX = 100;       // 水晶血量
+  var CONTACT_DMG = 20;       // Boss 接觸時每秒傷害
+  var KB_SMALL = 0.8;         // 敲對一個字母的微幅擊退（佔整段路程 %）
+
+  var FLOORS = [
+    { name: '實習小魔王', icon: '👾', color: '#a78bfa', hp: 100,   type: 'char', speed: 2.0,
+      chars: 'fjasdkl;',
+      theme: '基礎主列', desc: 'F J A S D K L ;（單字母）' },
+    { name: '鋼鐵巨蛛',   icon: '🕷️', color: '#94a3b8', hp: 500,   type: 'char', speed: 2.2,
+      chars: 'fjasdkl;gh',
+      theme: '主列全範圍', desc: '加入 G、H（單字母）' },
+    { name: '暗影狂狼',   icon: '🐺', color: '#60a5fa', hp: 1000,  type: 'word', speed: 2.4,
+      theme: '主列簡單單字', desc: 'ask, dad, fall, glad…',
+      pool: ['ask','dad','fall','glad','sad','lad','gas','has','had','hall','flag','lash','dash','half','gall','gash','hash','lass','slag','add','all','ash','flask','salad'] },
+    { name: '煉獄惡魔',   icon: '👹', color: '#f97316', hp: 2000,  type: 'char', speed: 2.8,
+      chars: 'qwertyuiopqwertyuiopasdfjkl',
+      theme: '上列鍵加入', desc: 'Q W E R T Y U I O P（單字元，混合主列）' },
+    { name: '機械飛龍',   icon: '🐉', color: '#22d3ee', hp: 3500,  type: 'word', speed: 2.8,
+      theme: '主列+上列單字', desc: 'tree, water, store…',
+      pool: ['tree','water','quiet','store','paper','write','three','quote','power','tired','their','would','light','right','sleep','thirty','sweet','yellow','flower','people','weight','turkey'] },
+    { name: '深海巨妖',   icon: '🐙', color: '#38bdf8', hp: 5500,  type: 'char', speed: 3.2,
+      chars: 'zxcvbnmzxcvbnmasdfjklqweruiop',
+      theme: '下列鍵加入', desc: 'Z X C V B N M（單字元，混合複習）' },
+    { name: '時空泰坦',   icon: '🗿', color: '#a3a3a3', hp: 8000,  type: 'word', speed: 3.2,
+      theme: '全鍵盤基礎單字', desc: 'system, computer, keyboard…',
+      pool: ['apple','banana','system','computer','keyboard','window','orange','python','mouse','screen','quick','jumps','zebra','number','folder','planet','bridge','galaxy','island','frozen','dragon','cabinet','hockey','monitor','battery','network','library','picture','journey'] },
+    { name: '混沌邪神',   icon: '👁️', color: '#e879f9', hp: 12000, type: 'word', speed: 3.4,
+      theme: '進階長單字', desc: 'technology, development…',
+      pool: ['application','technology','development','JavaScript','programming','algorithm','interface','framework','database','security','browser','function','variable','internet','software','hardware','animation','developer','community','adventure','keyboard','practice'] },
+    { name: '末日騎士',   icon: '🏇', color: '#f87171', hp: 18000, type: 'sentence', speed: 3.4,
+      theme: '英文短句連擊', desc: '簡單英文短句（含空格）',
+      pool: ['hello world.','practice makes perfect.','keep calm and code on.','typing is fun.','learn to type fast.','never give up.','i love coding.','good luck, have fun.','see you tomorrow.','stay curious.','magic is in the keys.','the tower is tall.'] },
+    { name: '高塔終極魔王', icon: '👑', color: '#fbbf24', hp: 25000, type: 'sentence', speed: 3.6,
+      theme: '長句終極決戰', desc: '完整英文句子（大寫與標點）',
+      pool: ["The quick brown fox jumps over the lazy dog.","Hello, my name is Alex. Nice to meet you!","Could you please tell me where the station is?","I am learning how to type without looking at the keyboard.","What time does the meeting start tomorrow?","Practice every day, and you will get better!","Thank you for your help, Mr. Lin.","It's a beautiful day, isn't it?","The final boss waits at the top of the tower."] }
+  ];
+
+  /* ================= 進度儲存 ================= */
+  var STORE_KEY = 'sideTowerTyping_v1';
+  var progress = loadProgress();
+  function loadProgress() {
+    try {
+      var d = JSON.parse(localStorage.getItem(STORE_KEY));
+      if (d && typeof d.unlocked === 'number') {
+        d.unlocked = Math.min(Math.max(d.unlocked, 1), FLOORS.length);
+        d.cleared = Array.isArray(d.cleared) ? d.cleared : [];
+        return d;
+      }
+    } catch (e) {}
+    return { unlocked: 1, cleared: [] };
+  }
+  function saveProgress() {
+    var ok = true;
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(progress)); } catch (e) { ok = false; }
+    renderSaveState(ok, true);
+  }
+
+  /* ================= 虛擬鍵盤 ================= */
+  var SHIFT_MAP = {
+    '!':'1','@':'2','#':'3','$':'4','%':'5','^':'6','&':'7','*':'8','(':'9',')':'0',
+    '_':'-','+':'=','{':'[','}':']','|':'\\',':':';','"':"'",'<':',','>':'.','?':'/','~':'`'
+  };
+  var LEFT_HAND = '`12345qwertasdfgzxcvb';
+  var ROWS = [
+    [['`'],['1'],['2'],['3'],['4'],['5'],['6'],['7'],['8'],['9'],['0'],['-'],['='],['backspace','⌫ Back',2]],
+    [['tab','Tab',1.5],['q'],['w'],['e'],['r'],['t'],['y'],['u'],['i'],['o'],['p'],['['],[']'],['\\','\\',1.5]],
+    [['caps','Caps',1.8],['a'],['s'],['d'],['f'],['g'],['h'],['j'],['k'],['l'],[';'],["'"],['enter','Enter',2.2]],
+    [['shiftL','Shift',2.4],['z'],['x'],['c'],['v'],['b'],['n'],['m'],[','],['.'],['/'],['shiftR','Shift',2.4]],
+    [['spacer',null,3],[' ','Space',7],['spacer',null,3]]
+  ];
+  var keyEls = {};
+  function $(id) { return document.getElementById(id); }
+
+  function buildKeyboard() {
+    var kb = $('keyboard');
+    kb.innerHTML = '';
+    ROWS.forEach(function (row) {
+      var r = document.createElement('div');
+      r.className = 'krow';
+      row.forEach(function (k) {
+        var id = k[0], d = document.createElement('div');
+        if (id === 'spacer') d.className = 'spacer';
+        else {
+          d.className = 'key';
+          d.textContent = k[1] || (/^[a-z]$/.test(id) ? id.toUpperCase() : id);
+          if (id === 'f' || id === 'j') d.classList.add('home');
+          keyEls[id] = d;
+        }
+        d.style.setProperty('--f', k[2] || 1);
+        r.appendChild(d);
+      });
+      kb.appendChild(r);
+    });
+  }
+  function keyInfo(c) {
+    if (/^[A-Z]$/.test(c)) return { base: c.toLowerCase(), shift: true };
+    if (SHIFT_MAP[c]) return { base: SHIFT_MAP[c], shift: true };
+    return { base: c, shift: false };
+  }
+  function flashKey(k, cls) {
+    var el = keyEls[keyInfo(k).base];
+    if (!el) return;
+    el.classList.add(cls);
+    setTimeout(function () { el.classList.remove(cls); }, 160);
+  }
+  function updateKeyboard() {
+    Object.keys(keyEls).forEach(function (k) { keyEls[k].classList.remove('target'); });
+    var hint = $('shiftHint');
+    hint.textContent = '';
+    if (G.state === 'over') return;
+    var c = G.text.charAt(G.pos);
+    if (!c) return;
+    var info = keyInfo(c);
+    if (keyEls[info.base]) keyEls[info.base].classList.add('target');
+    if (info.shift) {
+      var useRight = LEFT_HAND.indexOf(info.base) !== -1;
+      keyEls[useRight ? 'shiftR' : 'shiftL'].classList.add('target');
+      hint.textContent = '提示：請同時按住' + (useRight ? '右' : '左') + '手 Shift 鍵';
+    }
+  }
+
+  /* ================= 狀態 ================= */
+  var G = {
+    floor: 1, state: 'ready',                 // ready | playing | over
+    bossHp: 0, bossMax: 0,
+    bossPos: 0, bossVis: 0,                   // 0（出生點）~ 100（碰到玩家）
+    hp: PLAYER_MAX, contactTimer: 0,
+    text: '', pos: 0, spans: [], err: false,
+    combo: 0, maxCombo: 0, correct: 0, wrong: 0, totalDmg: 0, elapsed: 0
+  };
+  var queue = [], lastUnit = '';
+
+  function shuffle(a) {
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+  function nextUnit() {
+    var F = FLOORS[G.floor - 1], u;
+    if (F.type === 'char') {
+      do { u = F.chars.charAt(Math.floor(Math.random() * F.chars.length)); }
+      while (u === lastUnit && F.chars.length > 1);
+    } else {
+      if (!queue.length) {
+        queue = shuffle(F.pool.slice());
+        if (queue.length > 1 && queue[queue.length - 1] === lastUnit) {
+          var t = queue[0]; queue[0] = queue[queue.length - 1]; queue[queue.length - 1] = t;
+        }
+      }
+      u = queue.pop();
+    }
+    lastUnit = u;
+    return u;
+  }
+
+  /* ================= 載入樓層 ================= */
+  function loadFloor(n) {
+    if (n < 1 || n > FLOORS.length || n > progress.unlocked) return;
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    var F = FLOORS[n - 1];
+    G.floor = n; G.state = 'ready';
+    G.bossMax = G.bossHp = F.hp;
+    G.bossPos = G.bossVis = 0;
+    G.hp = PLAYER_MAX; G.contactTimer = 0;
+    G.combo = G.maxCombo = G.correct = G.wrong = G.totalDmg = G.elapsed = 0;
+    queue = []; lastUnit = '';
+    closeModal();
+    clearEffects();
+
+    var boss = $('boss');
+    boss.style.setProperty('--bc', F.color);
+    boss.className = 'boss enter';
+    setTimeout(function () { boss.classList.remove('enter'); }, 700);
+    $('bossIcon').textContent = F.icon;
+    $('bossName').textContent = 'Lv.' + n + ' ' + F.name;
+    $('player').className = 'player';
+    $('crystal').className = 'crystal';
+    $('warn').classList.remove('on');
+    $('warnText').classList.remove('on');
+
+    $('hpTrail').style.transition = 'none';
+    updateBossBar();
+    void $('hpTrail').offsetWidth;
+    $('hpTrail').style.transition = '';
+    updateCrystalBar();
+
+    $('floorTitle').textContent = '第 ' + n + ' 層高塔｜' + F.icon + ' ' + F.name;
+    $('floorDesc').textContent = F.theme + '：' + F.desc + '（Boss 血量 ' + F.hp + '）';
+    setLog('準備迎戰 ' + F.name + '！');
+
+    G.text = nextUnit(); G.pos = 0; G.err = false;
+    renderUnit();
+
+    var r = $('ready');
+    r.hidden = false;
+    r.innerHTML =
+      '<h2>第 ' + n + ' 層 · ' + F.icon + ' ' + F.name + '</h2>' +
+      '<p>' + F.theme + '｜Boss 血量 ' + F.hp + '</p>' +
+      '<button class="btn primary" id="startBtn" type="button">⚔ 開始戰鬥</button>' +
+      '<div class="hint">也可以按 Enter 開始</div>';
+    $('startBtn').addEventListener('click', startBattle);
+
+    layoutBoss();
+    renderTower(); renderHud(); updateKeyboard(); renderSaveState(true, false);
+  }
+  function clearEffects() {
+    Array.prototype.slice.call($('stage').querySelectorAll('.missile, .dmg, .ring')).forEach(function (e) { e.remove(); });
+  }
+  function startBattle() {
+    if (G.state !== 'ready') return;
+    G.state = 'playing';
+    $('ready').hidden = true;
+    setLog('Boss 出現了！快輸入目標文字擊退它！');
+    updateKeyboard();
+  }
+
+  /* ================= 渲染 ================= */
+  function renderUnit() {
+    var F = FLOORS[G.floor - 1];
+    var b = $('target');
+    b.className = 'target t-' + F.type;
+    b.innerHTML = '';
+    G.spans = [];
+    var grp = null;
+    for (var i = 0; i < G.text.length; i++) {
+      var ch = G.text.charAt(i);
+      var sp = document.createElement('span');
+      sp.className = 'ch';
+      if (ch === ' ') {
+        sp.classList.add('space'); sp.textContent = '␣';
+        b.appendChild(sp); b.appendChild(document.createElement('wbr'));
+        grp = null;
+      } else {
+        sp.textContent = ch;
+        if (!grp) { grp = document.createElement('span'); grp.className = 'wordgrp'; b.appendChild(grp); }
+        grp.appendChild(sp);
+      }
+      G.spans.push(sp);
+    }
+    updateTarget();
+  }
+  function updateTarget() {
+    for (var i = 0; i < G.spans.length; i++) {
+      var cls = 'ch' + (G.text.charAt(i) === ' ' ? ' space' : '');
+      if (i < G.pos) cls += ' done';
+      else if (i === G.pos) cls += ' current' + (G.err ? ' error' : '');
+      G.spans[i].className = cls;
+    }
+    updateKeyboard();
+  }
+  function updateBossBar() {
+    var pct = Math.max(0, G.bossHp / G.bossMax * 100);
+    $('hpFill').style.width = pct + '%';
+    $('hpTrail').style.width = pct + '%';
+    $('hpText').textContent = Math.max(0, Math.ceil(G.bossHp)) + ' / ' + G.bossMax;
+  }
+  function updateCrystalBar() {
+    var pct = Math.max(0, G.hp / PLAYER_MAX * 100);
+    var bar = $('cHpBar');
+    bar.style.width = pct + '%';
+    bar.classList.toggle('low', pct <= 40);
+    $('cHpText').textContent = '水晶 ' + Math.max(0, G.hp) + ' / ' + PLAYER_MAX;
+  }
+  function renderHud() {
+    var total = G.correct + G.wrong;
+    var acc = total ? G.correct / total * 100 : null;
+    var accEl = $('sAcc');
+    accEl.textContent = acc === null ? '--' : acc.toFixed(1) + '%';
+    accEl.classList.toggle('low', acc !== null && acc < 85);
+    $('sDps').textContent = G.elapsed > 0.5 ? Math.round(G.totalDmg / G.elapsed) : 0;
+    $('sCombo').textContent = G.combo + ' (最高 ' + G.maxCombo + ')';
+    $('sDmg').textContent = Math.round(G.totalDmg);
+    $('distText').textContent = Math.round(G.bossPos) + '%';
+    $('distBar').style.width = G.bossPos + '%';
+  }
+  function renderTower() {
+    var t = $('tower');
+    t.innerHTML = '';
+    FLOORS.forEach(function (F, i) {
+      var n = i + 1;
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'fl';
+      var locked = n > progress.unlocked;
+      var cleared = progress.cleared.indexOf(n) !== -1;
+      if (n === G.floor) b.classList.add('current');
+      if (cleared) b.classList.add('cleared');
+      b.disabled = locked;
+      b.title = locked ? '尚未解鎖' : F.name;
+      b.innerHTML = '<span class="ic">' + (locked ? '🔒' : F.icon) + '</span><span>' + n + '</span><small>' + (locked ? '鎖定' : (cleared ? '已擊敗' : '開放')) + '</small>';
+      b.addEventListener('click', function () { loadFloor(n); });
+      t.appendChild(b);
+    });
+    $('progText').textContent = '通關 ' + progress.cleared.length + '/' + FLOORS.length;
+    $('progBar').style.width = (progress.cleared.length / FLOORS.length * 100) + '%';
+  }
+  function renderSaveState(ok, flash) {
+    var s = $('saveState');
+    s.textContent = ok ? '💾 進度已自動儲存｜最高解鎖：第 ' + progress.unlocked + ' 層 / ' + FLOORS.length : '⚠ 此瀏覽器無法儲存進度';
+    if (flash) {
+      s.classList.add('flash');
+      setTimeout(function () { s.classList.remove('flash'); }, 1200);
+    }
+  }
+  function setLog(msg) { $('log').textContent = msg; }
+
+  /* ================= Boss 位置（橫向軸） ================= */
+  function layoutBoss() {
+    var st = $('stage'), boss = $('boss');
+    var W = st.clientWidth, bw = boss.offsetWidth, homeW = $('home').offsetWidth + 8;
+    var minX = 44;
+    var maxX = Math.max(minX + 10, W - homeW - bw + 12);       // 到達此處＝碰到玩家陣地
+    boss.style.left = (minX + (G.bossVis / 100) * (maxX - minX)) + 'px';
+  }
+
+  /* ================= 特效 ================= */
+  function center(el) {
+    var st = $('stage').getBoundingClientRect(), r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2 - st.left, y: r.top + r.height / 2 - st.top };
+  }
+  function fireMissile(cls) {
+    var s = center($('player')), e = center($('bossIcon'));
+    var m = document.createElement('div');
+    m.className = 'missile' + (cls ? ' ' + cls : '');
+    m.style.left = s.x + 'px'; m.style.top = s.y + 'px';
+    $('stage').appendChild(m);
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () { m.style.left = e.x + 'px'; m.style.top = e.y + 'px'; });
+    });
+    setTimeout(function () { m.remove(); }, 320);
+  }
+  function floatText(target, text, cls) {
+    var p = center($(target));
+    var d = document.createElement('div');
+    d.className = 'dmg ' + (cls || '');
+    d.textContent = text;
+    d.style.left = (p.x + (Math.random() * 50 - 25)) + 'px';
+    d.style.top = (p.y - 24 + (Math.random() * 16 - 8)) + 'px';
+    $('stage').appendChild(d);
+    setTimeout(function () { d.remove(); }, 950);
+  }
+  function ringAt(target) {
+    var p = center($(target));
+    var r = document.createElement('div');
+    r.className = 'ring';
+    r.style.left = p.x + 'px'; r.style.top = p.y + 'px';
+    $('stage').appendChild(r);
+    setTimeout(function () { r.remove(); }, 520);
+  }
+  function retrigger(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
+  function shake(big) {
+    var a = $('app');
+    a.classList.remove('shake', 'shake-big'); void a.offsetWidth;
+    a.classList.add(big ? 'shake-big' : 'shake');
+  }
+
+  /* ================= 戰鬥邏輯 ================= */
+  function onCorrect(k) {
+    G.correct++; G.combo++;
+    if (G.combo > G.maxCombo) G.maxCombo = G.combo;
+    G.err = false;
+    G.pos++;
+    flashKey(k, 'ok');
+
+    var len = G.text.length;
+    var unitDone = G.pos >= len;
+    var mult = 1 + Math.min(G.combo, 50) * 0.04;               // 連擊加成，最高 ×3
+    var dmg = Math.round((BASE_DMG + (unitDone ? len * WORD_BONUS : 0)) * mult);
+
+    // 擊退：每字微幅；完成單字再大幅擊退（單字越長退越遠）
+    var kb = KB_SMALL;
+    var bigKb = 0;
+    if (unitDone) bigKb = len > 1 ? Math.min(4 + len * 0.9, 24) : 1.0;
+    kb += bigKb;
+    G.bossPos = Math.max(0, G.bossPos - kb);
+
+    var before = G.bossHp;
+    G.bossHp -= dmg;
+    G.totalDmg += Math.min(dmg, before);
+    var dead = G.bossHp <= 0;
+
+    fireMissile(unitDone ? 'big' : '');
+    setTimeout(function () {
+      retrigger($('boss'), 'hit');
+      floatText('bossIcon', (unitDone ? '爆擊 -' : '-') + dmg, unitDone ? 'crit' : '');
+      if (bigKb >= 4) { ringAt('bossIcon'); floatText('bossIcon', '◀ 擊退！', 'kb'); }
+      updateBossBar();
+    }, 210);
+
+    if (unitDone) setLog('💥 完整擊破「' + G.text + '」！爆擊 ' + dmg + '，Boss 被大幅擊退！（×' + mult.toFixed(2) + '）');
+    else setLog('命中！連擊 ' + G.combo + '（傷害 ×' + mult.toFixed(2) + '）');
+
+    if (dead) { G.state = 'over'; updateTarget(); renderHud(); win(); return; }
+
+    if (unitDone) {
+      retrigger($('target'), 'flash');
+      G.text = nextUnit(); G.pos = 0;
+      renderUnit();
+    } else {
+      updateTarget();
+    }
+  }
+
+  function onWrong(k) {
+    G.wrong++; G.combo = 0; G.err = true;
+    flashKey(k, 'bad');
+    updateTarget();
+    shake(false);
+    setLog('✖ 打錯了！Boss 繼續前進…');
+  }
+
+  function contactTick() {
+    G.hp = Math.max(0, G.hp - CONTACT_DMG);
+    updateCrystalBar();
+    shake(true);
+    retrigger($('player'), 'hurt');
+    floatText('crystal', '-' + CONTACT_DMG, 'pl');
+    setLog('🔥 Boss 正在攻擊水晶！快把它擊退！');
+    if (G.hp <= 0) lose();
+  }
+
+  document.addEventListener('keydown', function (e) {
+    var caps = e.getModifierState && e.getModifierState('CapsLock');
+    if (caps && G.state === 'playing') $('shiftHint').textContent = '⚠ Caps Lock 已開啟，請先關閉！';
+
+    if (G.state === 'ready' && !modalOpen) {
+      if (e.key === 'Enter') { e.preventDefault(); startBattle(); }
+      return;
+    }
+    if (G.state !== 'playing') return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === 'Backspace') { e.preventDefault(); return; }
+    if (e.key.length !== 1) return;
+    e.preventDefault();
+    if (document.activeElement && document.activeElement.tagName === 'BUTTON') document.activeElement.blur();
+    if (e.repeat) return;                                       // 防止長按連續觸發
+    if (e.key === G.text.charAt(G.pos)) onCorrect(e.key); else onWrong(e.key);
+    renderHud();
+  });
+  window.addEventListener('resize', layoutBoss);
+
+  /* ================= 主迴圈 ================= */
+  var lastTs = performance.now();
+  function loop(ts) {
+    var dt = Math.min((ts - lastTs) / 1000, 0.1);
+    lastTs = ts;
+    var F = FLOORS[G.floor - 1];
+
+    if (G.state === 'playing') {
+      G.elapsed += dt;
+      G.bossPos = Math.min(100, G.bossPos + F.speed * dt);      // Boss 由左向右推進
+      var contact = G.bossPos >= 100;
+      if (contact) {
+        G.contactTimer += dt;
+        if (G.contactTimer >= 1) { G.contactTimer -= 1; contactTick(); }
+      } else {
+        G.contactTimer = 0;
+      }
+      if (G.state === 'playing') {
+        $('warn').classList.toggle('on', contact);
+        $('warnText').classList.toggle('on', contact);
+        $('crystal').classList.toggle('danger', contact);
+      }
+    }
+    G.bossVis += (G.bossPos - G.bossVis) * Math.min(1, dt * 10); // 擊退平滑動畫
+    layoutBoss();
+    renderHud();
+    requestAnimationFrame(loop);
+  }
+
+  /* ================= 勝敗 ================= */
+  function endWarn() {
+    $('warn').classList.remove('on');
+    $('warnText').classList.remove('on');
+    $('crystal').classList.remove('danger');
+  }
+  function win() {
+    var F = FLOORS[G.floor - 1];
+    endWarn();
+    if (progress.cleared.indexOf(G.floor) === -1) progress.cleared.push(G.floor);
+    if (G.floor < FLOORS.length && progress.unlocked < G.floor + 1) progress.unlocked = G.floor + 1;
+    setLog('🏆 擊敗了 ' + F.name + '！');
+    setTimeout(function () { $('boss').classList.add('dead'); }, 230);
+    setTimeout(function () {
+      saveProgress();
+      renderTower();
+      showModal(true);
+    }, 1200);
+  }
+  function lose() {
+    G.state = 'over';
+    var F = FLOORS[G.floor - 1];
+    endWarn();
+    $('player').classList.add('dead');
+    $('crystal').classList.add('dead');
+    setLog('💀 水晶被 ' + F.name + ' 摧毀了…');
+    updateKeyboard();
+    setTimeout(function () { showModal(false); }, 800);
+  }
+
+  /* ================= 彈窗 ================= */
+  var modalOpen = false;
+  function showModal(victory) {
+    var F = FLOORS[G.floor - 1];
+    var last = G.floor >= FLOORS.length;
+    var total = G.correct + G.wrong;
+    var acc = total ? (G.correct / total * 100).toFixed(1) + '%' : '--';
+    var dps = G.elapsed > 0.5 ? Math.round(G.totalDmg / G.elapsed) : 0;
+    var m = Math.floor(G.elapsed / 60), s = Math.floor(G.elapsed % 60);
+    var time = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+    var box = $('modalBox');
+    box.className = 'box' + (victory ? '' : ' fail');
+    var title = victory ? (last ? '👑 登頂成功！' : '💥 擊殺通關！') : '💀 挑戰失敗';
+    var msg = victory
+      ? (last ? '你擊敗了高塔終極魔王，征服了整座高塔！' : '擊敗了 ' + F.name + '，已解鎖第 ' + (G.floor + 1) + ' 層！')
+      : '水晶被摧毀了，穩住節奏、少打錯字再挑戰一次吧！';
+    box.innerHTML =
+      '<h2>' + title + '</h2><p>' + msg + '</p>' +
+      '<div class="res">' +
+        '<div><b>' + time + '</b><span>戰鬥時間</span></div>' +
+        '<div><b>' + dps + '</b><span>DPS</span></div>' +
+        '<div><b>' + acc + '</b><span>正確率</span></div>' +
+        '<div><b>' + G.maxCombo + '</b><span>最高連擊</span></div>' +
+      '</div>' +
+      '<div class="btns">' +
+        (victory && !last ? '<button class="btn primary" id="mNext" type="button">前往下一層 ▶</button>' : '') +
+        '<button class="btn' + (victory && !last ? '' : ' primary') + '" id="mRetry" type="button">' + (victory ? '重新挑戰' : '再戰一次') + '</button>' +
+        '<button class="btn" id="mClose" type="button">關閉</button>' +
+      '</div>';
+    $('modal').hidden = false;
+    modalOpen = true;
+    var nx = $('mNext');
+    if (nx) nx.addEventListener('click', function () { loadFloor(G.floor + 1); });
+    $('mRetry').addEventListener('click', function () { loadFloor(G.floor); });
+    $('mClose').addEventListener('click', closeModal);
+  }
+  function closeModal() {
+    $('modal').hidden = true;
+    modalOpen = false;
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  }
+
+  /* ================= 重置 ================= */
+  $('resetBtn').addEventListener('click', function () {
+    if (confirm('確定要重置所有遊戲進度嗎？此動作無法復原。')) {
+      progress = { unlocked: 1, cleared: [] };
+      saveProgress();
+      loadFloor(1);
+    }
+  });
+
+  /* ================= 啟動 ================= */
+  buildKeyboard();
+  loadFloor(progress.unlocked);
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
