@@ -313,6 +313,30 @@
   .badge.got .bd { color: var(--txt); }
   .badge.got .bs { color: var(--g2); }
 
+  .mini.weakbtn { color: #67e8f9; border-color: #0e7490; }
+  .mini.weakbtn:hover { background: rgba(103,232,249,.10); color: #cffafe; border-color: #67e8f9; }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* ===== 錯字分析 ===== */
+  .weakbox { max-width: 620px; max-height: 88vh; overflow-y: auto; }
+  .weaksum { font-size: .82rem; color: var(--dim); margin-bottom: 12px; }
+  .weakempty { padding: 26px 8px; color: var(--dim); font-size: .9rem; }
+  .weaknote { font-size: .74rem; color: var(--dim); margin: 12px 0 0; }
+  .wk { background: var(--deep); border: 1px solid #334155; border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; text-align: left; }
+  .wk-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .wk-rank { color: var(--dim); font-size: 1rem; }
+  .wk-key { font-size: 1.7rem; font-weight: 900; color: #fca5a5; text-shadow: 0 0 10px rgba(239,68,68,.55); min-width: 1.2em; }
+  .wk-cnt { font-size: 1.05rem; color: #fbbf24; font-weight: bold; }
+  .wk-rate { margin-left: auto; font-size: .75rem; color: var(--dim); }
+  .wk-bar { height: 10px; background: #020617; border: 1px solid #334155; border-radius: 6px; overflow: hidden; margin: 6px 0; }
+  .wk-bar i { display: block; height: 100%; background: linear-gradient(90deg, #f59e0b, #ef4444); box-shadow: 0 0 8px rgba(239,68,68,.6); }
+  .wk-tip { font-size: .78rem; color: var(--txt); }
+  .res div.worst { grid-column: 1 / -1; border-color: #b45309; background: rgba(245,158,11,.08); }
+  .res div.worst b { color: #fbbf24; }
+  .res div.worst.ok { border-color: #047857; background: rgba(16,185,129,.08); }
+  .res div.worst.ok b { color: var(--g2); }
+  .res div.worst .wtip { display: block; margin-top: 4px; color: var(--txt); }
+
   /* ===== 成就解鎖通知（右上角）===== */
   #toasts { position: fixed; top: 64px; right: 14px; z-index: 80; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
   .toast {
@@ -351,6 +375,7 @@
   <a class="back" href="../index.html">← 返回歷程首頁</a>
   <h1>SIDE-TOWER.EXE <span>// 橫向進擊高塔 Boss 戰</span></h1>
   <div class="navbtns">
+    <button id="weakBtn" class="mini weakbtn" type="button">📊 錯字分析</button>
     <button id="achBtn" class="mini achbtn" type="button">🏆 成就牆 0/8</button>
     <button id="muteBtn" class="mini sound" type="button" aria-pressed="false">🔊 音效開啟</button>
     <button id="resetBtn" class="mini" type="button">重置遊戲進度</button>
@@ -432,6 +457,20 @@
     </div>
     <p id="achSummary"></p>
     <div id="achGrid" class="achgrid"></div>
+  </div>
+</div>
+
+<!-- 錯字分析 / 弱點特訓 -->
+<div id="weakModal" class="modal" hidden>
+  <div class="box weakbox" role="dialog" aria-label="錯字分析">
+    <div class="achhead">
+      <h2>📊 錯字分析 / 弱點特訓</h2>
+      <button id="weakClose" class="mini" type="button">✕ 關閉</button>
+    </div>
+    <p id="weakSummary" class="weaksum"></p>
+    <div id="weakList"></div>
+    <div class="btns"><button id="weakTrain" class="btn primary" type="button">🎯 開啟弱點特訓</button></div>
+    <p class="weaknote">特訓題目由你的高頻錯字組成，屬於練習模式，不影響樓層進度與成就。</p>
   </div>
 </div>
 
@@ -666,6 +705,226 @@
   document.getElementById('achModal').addEventListener('click', function (e) { if (e.target === this) closeAch(); });
   renderAchBtn();
 
+  /* ================= 高頻錯字紀錄與弱點特訓 ================= */
+  var WEAK_KEY = 'sideTowerTyping_wrongkeys_v1';
+  var weak = loadWeak();           // { keys: { z: { wrong: 8, total: 20 } } }  total = 對該目標字元的總按鍵次數
+  var weakOpen = false;
+  var TRAIN = null;                // 目前的特訓關卡（非特訓時為 null）
+
+  // 指法提醒：[手, 手指, 補充說明]
+  var FINGERS = {
+    q: ['左', '小指', '從 A 向上伸'],   w: ['左', '無名指', '從 S 向上伸'], e: ['左', '中指', '從 D 向上伸'],
+    r: ['左', '食指', '從 F 向上伸'],   t: ['左', '食指', '從 F 向右上斜伸'],
+    a: ['左', '小指', '基準位置'],       s: ['左', '無名指', '基準位置'],   d: ['左', '中指', '基準位置'],
+    f: ['左', '食指', '基準位置，指尖有凸點'], g: ['左', '食指', '從 F 向右橫移一格'],
+    z: ['左', '小指', '從 A 向下伸'],    x: ['左', '無名指', '從 S 向下伸'], c: ['左', '中指', '從 D 向下伸'],
+    v: ['左', '食指', '從 F 向下伸'],    b: ['左', '食指', '從 F 向右下斜伸'],
+    y: ['右', '食指', '從 J 向左上斜伸'], u: ['右', '食指', '從 J 向上伸'],  i: ['右', '中指', '從 K 向上伸'],
+    o: ['右', '無名指', '從 L 向上伸'],  p: ['右', '小指', '從 ; 向上伸'],
+    h: ['右', '食指', '從 J 向左橫移一格'], j: ['右', '食指', '基準位置，指尖有凸點'],
+    k: ['右', '中指', '基準位置'],       l: ['右', '無名指', '基準位置'],   ';': ['右', '小指', '基準位置'],
+    n: ['右', '食指', '從 J 向左下斜伸'], m: ['右', '食指', '從 J 向下伸'],
+    ',': ['右', '中指', '從 K 向下伸'],  '.': ['右', '無名指', '從 L 向下伸'], '/': ['右', '小指', '從 ; 向下伸'],
+    "'": ['右', '小指', '從 ; 向右伸'],
+    ' ': 'Space 鍵建議使用大拇指按壓（左右手皆可）',
+    '!': '! 需右手小指按住 Shift，再用左手小指按 1',
+    '?': '? 需左手小指按住 Shift，再用右手小指按 /'
+  };
+
+  // 標點 / 空白的特訓短詞
+  var PUNCT_WORDS = {
+    '.': ['stop.', 'go on.', 'the end.', 'i see.'],
+    ',': ['yes, sir', 'hi, tom', 'well, ok'],
+    "'": ["it's", "don't", "i'm", "can't"],
+    '!': ['go!', 'wow!', 'nice!', 'run!'],
+    '?': ['why?', 'what?', 'how so?', 'who?'],
+    ' ': ['go on', 'it is', 'a big dog', 'so far', 'my tea', 'up to me']
+  };
+
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function curFloor() { return G.training ? TRAIN : FLOORS[G.floor - 1]; }
+
+  function loadWeak() {
+    try {
+      var d = JSON.parse(localStorage.getItem(WEAK_KEY));
+      if (d && d.keys && typeof d.keys === 'object') {
+        var clean = {};
+        Object.keys(d.keys).forEach(function (k) {
+          var v = d.keys[k];
+          if (v && Number(v.total) > 0) clean[k] = { wrong: Number(v.wrong) || 0, total: Number(v.total) };
+        });
+        return { keys: clean };
+      }
+    } catch (e) {}
+    return { keys: {} };
+  }
+  function saveWeak() {
+    try { localStorage.setItem(WEAK_KEY, JSON.stringify(weak)); } catch (e) {}
+  }
+  function normKey(c) { return /^[A-Z]$/.test(c) ? c.toLowerCase() : c; }       // 大寫與小寫視為同一個鍵
+  function keyLabel(k) { return k === ' ' ? '␣ Space' : (/^[a-z]$/.test(k) ? k.toUpperCase() : k); }
+
+  // 每次按鍵（對 / 錯）都以「目標字元」為單位記錄
+  function recordKey(target, ok) {
+    if (!target) return;
+    var k = normKey(target);
+    var r = weak.keys[k] || (weak.keys[k] = { wrong: 0, total: 0 });
+    r.total++;
+    if (!ok) {
+      r.wrong++;
+      G.wrongMap[k] = (G.wrongMap[k] || 0) + 1;
+    }
+    saveWeak();
+  }
+
+  // 前 N 大高頻錯字：錯誤次數多者優先，次數相同比錯誤率
+  function topWeak(n) {
+    return Object.keys(weak.keys).map(function (k) {
+      var v = weak.keys[k];
+      return { k: k, wrong: v.wrong, total: v.total, rate: v.total ? v.wrong / v.total : 0 };
+    }).filter(function (x) { return x.wrong > 0; })
+      .sort(function (a, b) { return b.wrong - a.wrong || b.rate - a.rate || (a.k < b.k ? -1 : 1); })
+      .slice(0, n);
+  }
+
+  function tipFor(k) {
+    var f = FINGERS[k], L = keyLabel(k);
+    if (!f) return L + ' 鍵請對照下方虛擬鍵盤的位置按壓';
+    if (typeof f === 'string') return f;
+    return L + ' 鍵建議使用' + f[0] + '手' + f[1] + '按壓（' + f[2] + '）';
+  }
+
+  /* ---------- 結算畫面：本局錯字最多的字母 ---------- */
+  function worstHtml() {
+    var m = G.wrongMap, ks = Object.keys(m);
+    if (!ks.length) return '<div class="worst ok"><b>✨ 零失誤</b><span>本局沒有按錯任何字母</span></div>';
+    var max = Math.max.apply(null, ks.map(function (k) { return m[k]; }));
+    var top = ks.filter(function (k) { return m[k] === max; }).sort();
+    var shown = top.slice(0, 3).map(keyLabel).join('、') + (top.length > 3 ? ' 等 ' + top.length + ' 個' : '');
+    var cnt = top.length > 1 ? '各 ' + max + ' 次' : max + ' 次';
+    return '<div class="worst"><b>⚠ ' + esc(shown) + '（' + cnt + '）</b><span>本局錯字最多的字母</span>' +
+           '<span class="wtip">💡 ' + esc(tipFor(top[0])) + '</span></div>';
+  }
+  function resultButtons(victory, last, tr) {
+    var h = '';
+    if (tr) {
+      h += '<button class="btn primary" id="mRetry" type="button">🎯 再練一次</button>' +
+           '<button class="btn" id="mBack" type="button">返回高塔</button>';
+    } else {
+      if (victory && !last) h += '<button class="btn primary" id="mNext" type="button">前往下一層 ▶</button>';
+      h += '<button class="btn' + (victory && !last ? '' : ' primary') + '" id="mRetry" type="button">' + (victory ? '重新挑戰' : '再戰一次') + '</button>';
+    }
+    return h + '<button class="btn" id="mWeak" type="button">📊 錯字分析 / 弱點特訓</button>' +
+               '<button class="btn" id="mClose" type="button">關閉</button>';
+  }
+
+  /* ---------- 錯字分析面板 ---------- */
+  function renderWeak() {
+    var list = topWeak(5), tw = 0, tt = 0;
+    Object.keys(weak.keys).forEach(function (k) { tw += weak.keys[k].wrong; tt += weak.keys[k].total; });
+    $('weakSummary').textContent = tt
+      ? '累計按鍵 ' + tt + ' 次｜按錯 ' + tw + ' 次｜整體正確率 ' + ((1 - tw / tt) * 100).toFixed(1) + '%'
+      : '';
+    var box = $('weakList');
+    box.innerHTML = '';
+    if (!list.length) {
+      box.innerHTML = '<div class="weakempty">' + (tt ? '🎉 目前沒有任何按錯紀錄，太厲害了！' : '還沒有錯字紀錄，先去打幾場再回來看看吧！') + '</div>';
+    } else {
+      list.forEach(function (x, i) {
+        var d = document.createElement('div');
+        d.className = 'wk';
+        d.innerHTML = '<div class="wk-top"><span class="wk-rank">' + (i + 1) + '.</span><span class="wk-key">' + esc(keyLabel(x.k)) +
+          '</span><span class="wk-cnt">(' + x.wrong + '次)</span><span class="wk-rate">錯誤率 ' + Math.round(x.rate * 100) + '%（' + x.wrong + ' / ' + x.total + '）</span></div>' +
+          '<div class="wk-bar"><i style="width:' + Math.max(6, x.wrong / list[0].wrong * 100) + '%"></i></div>' +
+          '<div class="wk-tip">💡 ' + esc(tipFor(x.k)) + '</div>';
+        box.appendChild(d);
+      });
+    }
+    $('weakTrain').disabled = !list.length;
+  }
+  function openWeak() {
+    weakOpen = true;                                         // 開啟期間遊戲暫停、不接收打字
+    renderWeak();
+    $('weakModal').hidden = false;
+    $('weakBtn').blur();
+  }
+  function closeWeak() {
+    weakOpen = false;
+    $('weakModal').hidden = true;
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  }
+  function resetWeak() {
+    weak = { keys: {} };
+    saveWeak();
+    if (weakOpen) renderWeak();
+  }
+
+  /* ---------- 專屬特訓關卡 ---------- */
+  function allWords() {
+    var seen = {}, out = [];
+    FLOORS.forEach(function (F) {
+      if (F.type === 'word') F.pool.forEach(function (w) { if (!seen[w]) { seen[w] = 1; out.push(w); } });
+    });
+    return out;
+  }
+  function makeDrill(letters) {
+    var helpers = ['f', 'j', 'd', 'k'], s = '';
+    for (var j = 0; j < 4; j++) {
+      var src = (j % 2 === 0 || Math.random() < 0.5) ? letters : (letters.length > 2 ? letters : helpers);
+      var c, tries = 0;
+      do { c = src[Math.floor(Math.random() * src.length)]; }
+      while (c === s.charAt(s.length - 1) && src.length > 1 && ++tries < 6);
+      s += c;
+    }
+    return s;
+  }
+  function buildTraining() {
+    var top = topWeak(5);
+    if (!top.length) return null;
+    var keys = top.map(function (x) { return x.k; });
+    var letters = keys.filter(function (k) { return /^[a-z;]$/.test(k); });
+    var pool = [];
+
+    // 1) 含弱點字母的真實單字：弱點字母密度高者優先
+    var scored = allWords().map(function (w) {
+      var lw = w.toLowerCase(), s = 0;
+      for (var i = 0; i < lw.length; i++) if (keys.indexOf(lw.charAt(i)) !== -1) s++;
+      return { w: w, s: s, d: s / lw.length };
+    }).filter(function (x) { return x.s > 0; });
+    shuffle(scored);
+    scored.sort(function (a, b) { return b.d - a.d || b.s - a.s; });
+    scored.slice(0, 10).forEach(function (x) { pool.push(x.w); });
+
+    // 2) 標點 / 空白：短詞
+    keys.forEach(function (k) {
+      if (PUNCT_WORDS[k]) shuffle(PUNCT_WORDS[k].slice()).slice(0, 3).forEach(function (w) { pool.push(w); });
+    });
+
+    // 3) 連打練習：弱點字母組成的 4 字組合
+    if (letters.length) {
+      for (var t = 0, got = 0; t < 30 && got < 8; t++) {
+        var d = makeDrill(letters);
+        if (pool.indexOf(d) === -1) { pool.push(d); got++; }
+      }
+    }
+    if (!pool.length) pool.push(keys.map(function (k) { return k + k; }).join('').slice(0, 6));
+
+    var label = keys.map(keyLabel).join('、');
+    return { name: '弱點特訓靶', icon: '🎯', color: '#f59e0b', hp: 1500, type: 'word', speed: 2.2,
+             pool: pool, theme: '弱點特訓', desc: '專攻你的高頻錯字：' + label, keysLabel: label, training: true };
+  }
+  function startTraining() {
+    if (!topWeak(5).length) return;
+    if (G.state === 'playing' && !confirm('目前的戰鬥將會中斷，確定要進入弱點特訓嗎？')) return;
+    closeWeak();
+    loadFloor(0, true);
+  }
+
+  $('weakBtn').addEventListener('click', openWeak);
+  $('weakClose').addEventListener('click', closeWeak);
+  $('weakTrain').addEventListener('click', startTraining);
+  $('weakModal').addEventListener('click', function (e) { if (e.target === this) closeWeak(); });
+
   /* ================= 遊戲參數 ================= */
   var BASE_DMG = 10;          // 每敲對一個字母的基礎傷害
   var WORD_BONUS = 20;        // 完成單字：長度 × 20 爆擊傷害
@@ -792,6 +1051,7 @@
 
   /* ================= 狀態 ================= */
   var G = {
+    training: false, wrongMap: {},
     floor: 1, state: 'ready',                 // ready | playing | over
     bossHp: 0, bossMax: 0,
     bossPos: 0, bossVis: 0,                   // 0（出生點）~ 100（碰到玩家）
@@ -809,7 +1069,7 @@
     return a;
   }
   function nextUnit() {
-    var F = FLOORS[G.floor - 1], u;
+    var F = curFloor(), u;
     if (F.type === 'char') {
       do { u = F.chars.charAt(Math.floor(Math.random() * F.chars.length)); }
       while (u === lastUnit && F.chars.length > 1);
@@ -827,15 +1087,19 @@
   }
 
   /* ================= 載入樓層 ================= */
-  function loadFloor(n) {
-    if (n < 1 || n > FLOORS.length || n > progress.unlocked) return;
+  function loadFloor(n, training) {
+    if (!training && (n < 1 || n > FLOORS.length || n > progress.unlocked)) return;
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
-    var F = FLOORS[n - 1];
-    G.floor = n; G.state = 'ready';
+    var F = training ? buildTraining() : FLOORS[n - 1];
+    if (!F) return;                                          // 特訓需要至少一個錯字紀錄
+    G.training = !!training;
+    TRAIN = training ? F : null;
+    G.floor = training ? 0 : n; G.state = 'ready';
     G.bossMax = G.bossHp = F.hp;
     G.bossPos = G.bossVis = 0;
     G.hp = PLAYER_MAX; G.contactTimer = 0;
     G.combo = G.maxCombo = G.correct = G.wrong = G.totalDmg = G.elapsed = 0;
+    G.wrongMap = {};
     queue = []; lastUnit = '';
     closeModal();
     clearEffects();
@@ -845,7 +1109,7 @@
     boss.className = 'boss enter';
     setTimeout(function () { boss.classList.remove('enter'); }, 700);
     $('bossIcon').textContent = F.icon;
-    $('bossName').textContent = 'Lv.' + n + ' ' + F.name;
+    $('bossName').textContent = training ? '特訓 ' + F.name : 'Lv.' + n + ' ' + F.name;
     $('player').className = 'player';
     $('crystal').className = 'crystal';
     $('warn').classList.remove('on');
@@ -857,7 +1121,7 @@
     $('hpTrail').style.transition = '';
     updateCrystalBar();
 
-    $('floorTitle').textContent = '第 ' + n + ' 層高塔｜' + F.icon + ' ' + F.name;
+    $('floorTitle').textContent = training ? '🎯 弱點特訓場｜專攻：' + F.keysLabel : '第 ' + n + ' 層高塔｜' + F.icon + ' ' + F.name;
     $('floorDesc').textContent = F.theme + '：' + F.desc + '（Boss 血量 ' + F.hp + '）';
     setLog('準備迎戰 ' + F.name + '！');
 
@@ -867,7 +1131,7 @@
     var r = $('ready');
     r.hidden = false;
     r.innerHTML =
-      '<h2>第 ' + n + ' 層 · ' + F.icon + ' ' + F.name + '</h2>' +
+      '<h2>' + (training ? '特訓 · ' : '第 ' + n + ' 層 · ') + F.icon + ' ' + F.name + '</h2>' +
       '<p>' + F.theme + '｜Boss 血量 ' + F.hp + '</p>' +
       '<button class="btn primary" id="startBtn" type="button">⚔ 開始戰鬥</button>' +
       '<div class="hint">也可以按 Enter 開始</div>';
@@ -890,7 +1154,7 @@
 
   /* ================= 渲染 ================= */
   function renderUnit() {
-    var F = FLOORS[G.floor - 1];
+    var F = curFloor();
     var b = $('target');
     b.className = 'target t-' + F.type;
     b.innerHTML = '';
@@ -1055,8 +1319,8 @@
 
     fireMissile(unitDone ? 'big' : '');
     playSfx(unitDone && len > 1 ? 'critical' : 'hit');
-    if (unitDone && len > 1) addCrit();                      // 成就：單字爆擊累計
-    if (G.combo >= COMBO_GOAL) unlockAch('speed');           // 成就：連續 30 字未失誤
+    if (!G.training && unitDone && len > 1) addCrit();                      // 成就：單字爆擊累計
+    if (!G.training && G.combo >= COMBO_GOAL) unlockAch('speed');           // 成就：連續 30 字未失誤
     setTimeout(function () {
       retrigger($('boss'), 'hit');
       floatText('bossIcon', (unitDone ? '爆擊 -' : '-') + dmg, unitDone ? 'crit' : '');
@@ -1101,7 +1365,7 @@
     var caps = e.getModifierState && e.getModifierState('CapsLock');
     if (caps && G.state === 'playing') $('shiftHint').textContent = '⚠ Caps Lock 已開啟，請先關閉！';
 
-    if (achOpen) { if (e.key === 'Escape') closeAch(); return; }
+    if (achOpen || weakOpen) { if (e.key === 'Escape') { if (achOpen) closeAch(); else closeWeak(); } return; }
 
     if (G.state === 'ready' && !modalOpen) {
       if (e.key === 'Enter') { e.preventDefault(); startBattle(); }
@@ -1114,7 +1378,9 @@
     e.preventDefault();
     if (document.activeElement && document.activeElement.tagName === 'BUTTON') document.activeElement.blur();
     if (e.repeat) return;                                       // 防止長按連續觸發
-    if (e.key === G.text.charAt(G.pos)) onCorrect(e.key); else onWrong(e.key);
+    var tgt = G.text.charAt(G.pos), hit = e.key === tgt;
+    if (!caps) recordKey(tgt, hit);                          // Caps Lock 開啟時字母必錯，不計入統計
+    if (hit) onCorrect(e.key); else onWrong(e.key);
     renderHud();
   });
   window.addEventListener('resize', layoutBoss);
@@ -1124,9 +1390,9 @@
   function loop(ts) {
     var dt = Math.min((ts - lastTs) / 1000, 0.1);
     lastTs = ts;
-    var F = FLOORS[G.floor - 1];
+    var F = curFloor();
 
-    if (G.state === 'playing' && !achOpen) {
+    if (G.state === 'playing' && !achOpen && !weakOpen) {
       G.elapsed += dt;
       G.bossPos = Math.min(100, G.bossPos + F.speed * dt);      // Boss 由左向右推進
       var contact = G.bossPos >= 100;
@@ -1155,22 +1421,24 @@
     $('crystal').classList.remove('danger');
   }
   function win() {
-    var F = FLOORS[G.floor - 1];
+    var F = curFloor();
     endWarn();
-    checkWinAchievements();
-    if (progress.cleared.indexOf(G.floor) === -1) progress.cleared.push(G.floor);
-    if (G.floor < FLOORS.length && progress.unlocked < G.floor + 1) progress.unlocked = G.floor + 1;
+    if (!G.training) {                                       // 特訓不影響進度與成就
+      checkWinAchievements();
+      if (progress.cleared.indexOf(G.floor) === -1) progress.cleared.push(G.floor);
+      if (G.floor < FLOORS.length && progress.unlocked < G.floor + 1) progress.unlocked = G.floor + 1;
+    }
     setLog('🏆 擊敗了 ' + F.name + '！');
     setTimeout(function () { $('boss').classList.add('dead'); }, 230);
     setTimeout(function () {
-      saveProgress();
+      if (!G.training) saveProgress();
       renderTower();
       showModal(true);
     }, 1200);
   }
   function lose() {
     G.state = 'over';
-    var F = FLOORS[G.floor - 1];
+    var F = curFloor();
     endWarn();
     $('player').classList.add('dead');
     $('crystal').classList.add('dead');
@@ -1182,8 +1450,9 @@
   /* ================= 彈窗 ================= */
   var modalOpen = false;
   function showModal(victory) {
-    var F = FLOORS[G.floor - 1];
-    var last = G.floor >= FLOORS.length;
+    var F = curFloor();
+    var tr = G.training;
+    var last = !tr && G.floor >= FLOORS.length;
     var total = G.correct + G.wrong;
     var acc = total ? (G.correct / total * 100).toFixed(1) + '%' : '--';
     var dps = G.elapsed > 0.5 ? Math.round(G.totalDmg / G.elapsed) : 0;
@@ -1191,10 +1460,13 @@
     var time = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
     var box = $('modalBox');
     box.className = 'box' + (victory ? '' : ' fail');
-    var title = victory ? (last ? '👑 登頂成功！' : '💥 擊殺通關！') : '💀 挑戰失敗';
-    var msg = victory
-      ? (last ? '你擊敗了高塔終極魔王，征服了整座高塔！' : '擊敗了 ' + F.name + '，已解鎖第 ' + (G.floor + 1) + ' 層！')
-      : '水晶被摧毀了，穩住節奏、少打錯字再挑戰一次吧！';
+    var title = tr ? (victory ? '🎯 特訓完成！' : '💀 特訓失敗')
+      : (victory ? (last ? '👑 登頂成功！' : '💥 擊殺通關！') : '💀 挑戰失敗');
+    var msg = tr
+      ? (victory ? '弱點特訓完成！多練幾次，錯誤率就會慢慢下降。' : '水晶被摧毀了，放慢一點，先求準再求快吧！')
+      : (victory
+          ? (last ? '你擊敗了高塔終極魔王，征服了整座高塔！' : '擊敗了 ' + F.name + '，已解鎖第 ' + (G.floor + 1) + ' 層！')
+          : '水晶被摧毀了，穩住節奏、少打錯字再挑戰一次吧！');
     box.innerHTML =
       '<h2>' + title + '</h2><p>' + msg + '</p>' +
       '<div class="res">' +
@@ -1202,17 +1474,17 @@
         '<div><b>' + dps + '</b><span>DPS</span></div>' +
         '<div><b>' + acc + '</b><span>正確率</span></div>' +
         '<div><b>' + G.maxCombo + '</b><span>最高連擊</span></div>' +
+        worstHtml() +
       '</div>' +
-      '<div class="btns">' +
-        (victory && !last ? '<button class="btn primary" id="mNext" type="button">前往下一層 ▶</button>' : '') +
-        '<button class="btn' + (victory && !last ? '' : ' primary') + '" id="mRetry" type="button">' + (victory ? '重新挑戰' : '再戰一次') + '</button>' +
-        '<button class="btn" id="mClose" type="button">關閉</button>' +
-      '</div>';
+      '<div class="btns">' + resultButtons(victory, last, tr) + '</div>';
     $('modal').hidden = false;
     modalOpen = true;
     var nx = $('mNext');
     if (nx) nx.addEventListener('click', function () { loadFloor(G.floor + 1); });
-    $('mRetry').addEventListener('click', function () { loadFloor(G.floor); });
+    $('mRetry').addEventListener('click', function () { if (tr) loadFloor(0, true); else loadFloor(G.floor); });
+    var bk = $('mBack');
+    if (bk) bk.addEventListener('click', function () { loadFloor(progress.unlocked); });
+    $('mWeak').addEventListener('click', openWeak);
     $('mClose').addEventListener('click', closeModal);
   }
   function closeModal() {
@@ -1223,10 +1495,11 @@
 
   /* ================= 重置 ================= */
   $('resetBtn').addEventListener('click', function () {
-    if (confirm('確定要重置所有遊戲進度與成就徽章嗎？此動作無法復原。')) {
+    if (confirm('確定要重置所有遊戲進度、成就徽章與錯字統計嗎？此動作無法復原。')) {
       progress = { unlocked: 1, cleared: [] };
       saveProgress();
       resetAch();
+      resetWeak();
       loadFloor(1);
     }
   });
