@@ -36,17 +36,41 @@
 
   /* ===== 導覽 ===== */
   .nav {
-    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-    padding: 12px 20px; background: var(--panel);
+    position: sticky; top: 0; z-index: 40;                 /* 捲動時固定在頂端；層級低於彈窗(50)與成就通知(80) */
+    display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap;
+    padding: 10px 20px; background: var(--panel);
     border-bottom: 1px solid var(--g); box-shadow: 0 0 18px rgba(16,185,129,.25);
   }
-  .nav a.back {
-    color: var(--g2); text-decoration: none; font-weight: bold;
-    border: 1px solid var(--g); padding: 6px 12px; border-radius: 6px; transition: .2s;
+  /* 返回歷程首頁：固定在最左側，不縮小、不換行 */
+  .nav .back-btn {
+    position: relative; z-index: 3; order: 1; flex: 0 0 auto; white-space: nowrap;
+    color: #10b981; font-weight: bold; text-decoration: none;
+    border: 1px solid #10b981; padding: 6px 12px; border-radius: 6px;
+    text-shadow: 0 0 8px rgba(16,185,129,.55);
+    transition: background .2s, color .2s, box-shadow .2s;
   }
-  .nav a.back:hover { background: var(--g); color: #052e1f; box-shadow: 0 0 12px var(--g); }
-  .nav h1 { font-size: 1.15rem; letter-spacing: 2px; color: var(--g2); text-shadow: 0 0 8px rgba(16,185,129,.7); }
+  .nav .back-btn:hover, .nav .back-btn:focus-visible {
+    background: #10b981; color: #052e1f; text-decoration: underline; text-underline-offset: 3px;
+    text-shadow: none; box-shadow: 0 0 14px #10b981; outline: none;
+  }
+  /* 標題：吃剩餘空間，空間不夠時以 … 收尾，不會把連結或按鈕擠掉 */
+  .nav h1 {
+    order: 2; flex: 1 1 160px; min-width: 0; margin: 0; text-align: center;
+    font-size: 1.15rem; letter-spacing: 2px; color: var(--g2); text-shadow: 0 0 8px rgba(16,185,129,.7);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
   .nav h1 span { color: var(--dim); font-size: .85rem; letter-spacing: 1px; }
+  /* 右側按鈕群：空間不夠時整組換到下一行，彼此不重疊 */
+  .navbtns { position: relative; z-index: 2; order: 3; flex: 0 1 auto; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px 8px; }
+  .navbtns .mini { white-space: nowrap; }
+  @media (max-width: 860px) {
+    .navbtns { flex: 1 1 100%; justify-content: flex-start; }
+  }
+  @media (max-width: 640px) {
+    .nav { position: static; padding: 8px 12px; }          /* 手機畫面窄，導覽列不固定以免佔掉太多高度 */
+    .nav h1 { flex-basis: 0; font-size: 1rem; letter-spacing: 1px; }
+    .navbtns .mini { padding: 4px 8px; font-size: .74rem; }
+  }
   .mini {
     background: transparent; color: var(--dim); border: 1px solid #334155;
     padding: 5px 10px; border-radius: 6px; font-size: .8rem; transition: .2s;
@@ -285,7 +309,6 @@
   @keyframes ring { 0% { transform: scale(.3); opacity: 1; } 100% { transform: scale(3); opacity: 0; } }
   @keyframes okflash { 0% { box-shadow: 0 0 26px var(--g2); } 100% { box-shadow: 0 0 16px rgba(16,185,129,.45); } }
 
-  .navbtns { display: flex; gap: 8px; align-items: center; }
   .mini.sound { color: var(--g2); border-color: var(--g); }
   .mini.sound:hover { background: rgba(16,185,129,.18); color: var(--g2); border-color: var(--g); }
   .mini.sound.off { color: var(--dim); border-color: #334155; }
@@ -372,7 +395,7 @@
 <body>
 
 <header class="nav">
-  <a class="back" href="../index.html">← 返回歷程首頁</a>
+  <a href="../index.html" class="back-btn">← 返回歷程首頁</a>
   <h1>SIDE-TOWER.EXE <span>// 橫向進擊高塔 Boss 戰</span></h1>
   <div class="navbtns">
     <button id="weakBtn" class="mini weakbtn" type="button">📊 錯字分析</button>
@@ -623,6 +646,8 @@
 
   function showToast(a) {
     var box = document.getElementById('toasts');
+    var nav = document.querySelector('header.nav');
+    box.style.top = (nav ? Math.max(0, nav.getBoundingClientRect().bottom) + 8 : 64) + 'px';   // 避開導覽列
     var t = document.createElement('div');
     t.className = 'toast';
     t.innerHTML = '<div class="ti">' + a.icon + '</div><div><div class="tt">🏆 解鎖成就：' + a.name + '</div><div class="td">' + a.desc + '</div></div>';
