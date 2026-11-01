@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>英打遊戲版本四 (十鍵掉落練習)</title>
+<style>
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: #ffffff;
+    color: #111111;
+    font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  }
+  .topbar {
+    padding: 16px 24px;
+    border-bottom: 1px solid #dddddd;
+  }
+  .topbar a {
+    color: #1a56c4;
+    font-size: 1rem;
+  }
+  main {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 32px 24px 48px;
+  }
+  h1 {
+    margin: 0;
+    font-size: 2rem;
+    text-align: center;
+  }
+
+  /* 設定列 */
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 12px 32px;
+  }
+  .control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .control input[type="range"] {
+    width: 200px;
+  }
+  .control output {
+    min-width: 3.5em;
+    font-weight: 600;
+  }
+  .hint {
+    margin: 0;
+    text-align: center;
+    color: #555555;
+    font-size: 0.9rem;
+  }
+
+  /* 狀態列 */
+  .status {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px 32px;
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+
+  /* 遊戲區 */
+  .stage {
+    border: 2px solid #111111;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #ffffff;
+  }
+  .field {
+    position: relative;
+    height: min(58vh, 440px);
+    min-height: 280px;
+    overflow: hidden;
+    background-image: linear-gradient(to right, #e6e6e6 1px, transparent 1px);
+    background-size: 10% 100%;
+  }
+  .letter {
+    position: absolute;
+    top: 0;
+    width: 10%;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    will-change: transform;
+  }
+  .box {
+    width: min(40px, 88%);
+    aspect-ratio: 1 / 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    font-weight: 700;
+    background: #ffd43b;
+    border: 2px solid #111111;
+    border-radius: 8px;
+  }
+  .letter.hit .box {
+    background: #51cf66;
+    animation: pop 0.2s ease-out forwards;
+  }
+  .letter.miss .box {
+    background: #ff6b6b;
+    animation: fade 0.3s ease-out forwards;
+  }
+  @keyframes pop {
+    to { transform: scale(1.4); opacity: 0; }
+  }
+  @keyframes fade {
+    to { opacity: 0; }
+  }
+
+  /* 底部按鍵列（同時是落地線） */
+  .keyrow {
+    display: grid;
+    grid-template-columns: repeat(10, minmax(0, 1fr));
+    border-top: 3px solid #111111;
+  }
+  .k {
+    padding: 10px 0;
+    text-align: center;
+    font-size: 1.1rem;
+    font-weight: 700;
+    background: #f4f4f4;
+    border-left: 1px solid #dddddd;
+  }
+  .k:first-child {
+    border-left: 0;
+  }
+  .k.ok {
+    background: #51cf66;
+  }
+  .k.bad {
+    background: #ff6b6b;
+  }
+
+  /* 開始／結果面板 */
+  .overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.92);
+  }
+  .overlay[hidden] {
+    display: none;
+  }
+  .panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    padding: 24px;
+    text-align: center;
+  }
+  .panel h2 {
+    margin: 0;
+    font-size: 1.5rem;
+  }
+  .stats {
+    display: grid;
+    gap: 6px;
+    margin: 12px 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: 1.1rem;
+  }
+  button.primary {
+    font: inherit;
+    font-size: 1.25rem;
+    padding: 12px 40px;
+    color: #ffffff;
+    background: #111111;
+    border: 2px solid #111111;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  button.primary:focus-visible,
+  .topbar a:focus-visible,
+  input:focus-visible {
+    outline: 3px solid #1a73e8;
+    outline-offset: 3px;
+  }
+
+  @media (max-width: 480px) {
+    main {
+      padding: 24px 16px 40px;
+    }
+    h1 {
+      font-size: 1.5rem;
+    }
+    .control input[type="range"] {
+      width: 150px;
+    }
+    .box {
+      font-size: 1.1rem;
+    }
+    .k {
+      font-size: 0.95rem;
+    }
+  }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <a href="../index.html">返回歷程首頁</a>
+  </div>
+
+  <main>
+    <h1>英打遊戲版本四 (十鍵掉落練習)</h1>
+
+    <div class="controls">
+      <div class="control">
+        <label for="speed">字母落地時間</label>
+        <input type="range" id="speed" min="3" max="30" step="1" value="12">
+        <output id="speedVal" for="speed">12 秒</output>
+      </div>
+      <label class="control">
+        <input type="checkbox" id="accel">
+        漸進加速
+      </label>
+    </div>
+    <p class="hint">落地時間數值越大越慢。勾選漸進加速後，每一題的落地時間逐題縮短，第 10 題為設定值的 40%。</p>
+
+    <div class="status">
+      <span>得分：<span id="score">0</span></span>
+      <span>已出題：<span id="count">0 / 10</span></span>
+      <span>目前落地時間：<span id="dur">12.0 秒</span></span>
+    </div>
+
+    <div class="stage">
+      <div class="field" id="field">
+        <div class="overlay" id="overlay">
+          <div class="panel">
+            <div id="result" hidden>
+              <h2>本回合結束</h2>
+              <ul class="stats">
+                <li>得分：<span id="rScore"></span></li>
+                <li>漏接：<span id="rMiss"></span></li>
+                <li>按錯次數：<span id="rWrong"></span></li>
+                <li>平均反應時間：<span id="rAvg"></span></li>
+              </ul>
+            </div>
+            <button type="button" class="primary" id="start">開始</button>
+          </div>
+        </div>
+      </div>
+      <div class="keyrow" id="keyrow"></div>
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      var KEYS = ["A", "S", "D", "F", "G", "H", "J", "K", "L", ";"];
+      // 用實體按鍵代碼判斷，不受輸入法或大小寫影響
+      var CODE_MAP = {
+        KeyA: "A", KeyS: "S", KeyD: "D", KeyF: "F", KeyG: "G",
+        KeyH: "H", KeyJ: "J", KeyK: "K", KeyL: "L", Semicolon: ";"
+      };
+      var TOTAL = 10;          // 一回合題數
+      var LETTER_H = 40;       // 字母方塊高度（px），需與 CSS 的 .letter 高度一致
+      var END_RATIO = 0.4;     // 漸進加速：第 10 題的落地時間為設定值的 40%
+      var SPAWN_DIVISOR = 4;   // 出題間隔 = 該題落地時間 / 4
+
+      var field = document.getElementById("field");
+      var overlay = document.getElementById("overlay");
+      var resultBox = document.getElementById("result");
+      var startBtn = document.getElementById("start");
+      var keyrow = document.getElementById("keyrow");
+      var speed = document.getElementById("speed");
+      var speedVal = document.getElementById("speedVal");
+      var accelBox = document.getElementById("accel");
+      var scoreEl = document.getElementById("score");
+      var countEl = document.getElementById("count");
+      var durEl = document.getElementById("dur");
+      var rScore = document.getElementById("rScore");
+      var rMiss = document.getElementById("rMiss");
+      var rWrong = document.getElementById("rWrong");
+      var rAvg = document.getElementById("rAvg");
+
+      // 建立底部按鍵列
+      var keyCells = {};
+      KEYS.forEach(function (k) {
+        var cell = document.createElement("div");
+        cell.className = "k";
+        cell.textContent = k;
+        keyrow.appendChild(cell);
+        keyCells[k] = cell;
+      });
+
+      var playing = false;
+      var rafId = 0;
+      var t = 0;               // 遊戲時鐘（毫秒）；分頁切到背景時會暫停
+      var last = null;
+      var baseMs = 12000;
+      var accel = false;
+      var curDuration = 12000;
+      var active = [];
+      var spawned = 0;
+      var hits = 0;
+      var misses = 0;
+      var wrong = 0;
+      var reactionSum = 0;
+      var lastKey = null;
+      var nextSpawnAt = 0;
+      var flashTimers = {};
+
+      function durationFor(i) {
+        return accel ? baseMs * (1 - (1 - END_RATIO) * i / (TOTAL - 1)) : baseMs;
+      }
+
+      function updateStatus() {
+        scoreEl.textContent = hits;
+        countEl.textContent = spawned + " / " + TOTAL;
+        durEl.textContent = (curDuration / 1000).toFixed(1) + " 秒";
+      }
+
+      function pickKey() {
+        var busy = active.map(function (l) { return l.key; });
+        var pool = KEYS.filter(function (k) {
+          return busy.indexOf(k) === -1 && k !== lastKey;
+        });
+        return pool[Math.floor(Math.random() * pool.length)];
+      }
+
+      function spawn() {
+        var key = pickKey();
+        var duration = durationFor(spawned);
+        var el = document.createElement("div");
+        el.className = "letter";
+        el.style.left = (KEYS.indexOf(key) * 10) + "%";
+        el.style.transform = "translateY(0px)";
+        var box = document.createElement("span");
+        box.className = "box";
+        box.textContent = key;
+        el.appendChild(box);
+        field.appendChild(el);
+
+        active.push({ key: key, el: el, start: t, duration: duration });
+        lastKey = key;
+        spawned += 1;
+        curDuration = duration;
+        nextSpawnAt = t + duration / SPAWN_DIVISOR;
+        updateStatus();
+      }
+
+      function removeLetter(el, cls) {
+        el.classList.add(cls);
+        setTimeout(function () { el.remove(); }, 350);
+      }
+
+      function flash(key, cls) {
+        var cell = keyCells[key];
+        cell.classList.remove("ok", "bad");
+        cell.classList.add(cls);
+        clearTimeout(flashTimers[key]);
+        flashTimers[key] = setTimeout(function () {
+          cell.classList.remove(cls);
+        }, 160);
+      }
+
+      function loop(ts) {
+        if (!playing) return;
+        var delta = last === null ? 0 : Math.min(ts - last, 100);
+        last = ts;
+        t += delta;
+
+        if (spawned < TOTAL && t >= nextSpawnAt) spawn();
+
+        var maxY = Math.max(0, field.clientHeight - LETTER_H);
+        for (var i = active.length - 1; i >= 0; i--) {
+          var l = active[i];
+          var p = (t - l.start) / l.duration;
+          if (p >= 1) {
+            l.el.style.transform = "translateY(" + maxY + "px)";
+            active.splice(i, 1);
+            misses += 1;
+            removeLetter(l.el, "miss");
+          } else {
+            l.el.style.transform = "translateY(" + (p * maxY) + "px)";
+          }
+        }
+
+        if (spawned === TOTAL && active.length === 0) {
+          finish();
+          return;
+        }
+        rafId = requestAnimationFrame(loop);
+      }
+
+      function startGame() {
+        field.querySelectorAll(".letter").forEach(function (n) { n.remove(); });
+        baseMs = Number(speed.value) * 1000;
+        accel = accelBox.checked;
+        active = [];
+        spawned = 0;
+        hits = 0;
+        misses = 0;
+        wrong = 0;
+        reactionSum = 0;
+        lastKey = null;
+        t = 0;
+        last = null;
+        nextSpawnAt = 400;
+        curDuration = durationFor(0);
+
+        speed.disabled = true;
+        accelBox.disabled = true;
+        overlay.hidden = true;
+        playing = true;
+        updateStatus();
+        rafId = requestAnimationFrame(loop);
+      }
+
+      function finish() {
+        playing = false;
+        cancelAnimationFrame(rafId);
+        speed.disabled = false;
+        accelBox.disabled = false;
+
+        scoreEl.textContent = hits;
+        rScore.textContent = hits + " / " + TOTAL;
+        rMiss.textContent = misses;
+        rWrong.textContent = wrong;
+        rAvg.textContent = hits ? (reactionSum / hits / 1000).toFixed(2) + " 秒" : "—";
+        resultBox.hidden = false;
+        startBtn.textContent = "重新開始";
+        overlay.hidden = false;
+        startBtn.focus();
+      }
+
+      startBtn.addEventListener("click", startGame);
+
+      speed.addEventListener("input", function () {
+        speedVal.textContent = speed.value + " 秒";
+        if (!playing) {
+          curDuration = Number(speed.value) * 1000;
+          updateStatus();
+        }
+      });
+
+      document.addEventListener("keydown", function (e) {
+        if (!playing || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+        var key = CODE_MAP[e.code];
+        if (!key) return;
+        e.preventDefault();
+
+        var found = -1;
+        for (var i = 0; i < active.length; i++) {
+          if (active[i].key === key) { found = i; break; }
+        }
+        if (found >= 0) {
+          var l = active.splice(found, 1)[0];
+          hits += 1;
+          reactionSum += t - l.start;
+          removeLetter(l.el, "hit");
+          flash(key, "ok");
+          updateStatus();
+        } else {
+          wrong += 1;
+          flash(key, "bad");
+        }
+      });
+
+      updateStatus();
+    })();
+  </script>
+</body>
+</html>
